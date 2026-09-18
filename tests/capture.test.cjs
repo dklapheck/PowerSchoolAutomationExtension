@@ -81,6 +81,11 @@ async function run() {
   assert(!JSON.stringify(stored).includes('11230898'), 'student ID excluded');
   assert(!JSON.stringify(stored).includes('private call text'), 'note text excluded');
   assert(!copied.includes('Student name'), 'student selector excluded');
+  const copySettings = details.children.find(child =>
+    child.tagName === 'BUTTON' && child.textContent === 'Copy Type/Subtype for Settings'
+  );
+  await copySettings.events.click();
+  assert.equal(copied, '1187\tLog Type\tGE:ECC\tECC Attempt');
   console.log('Capture test passed.');
 }
 
