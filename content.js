@@ -484,6 +484,15 @@
         studentNumber,
         date,
         note,
+        outcome: String(payload.outcome || '').trim(),
+        settings: payload.settings && typeof payload.settings === 'object'
+          ? {
+              typeValue: String(payload.settings.typeValue || '').trim(),
+              subtypeValue: String(payload.settings.subtypeValue || '').trim(),
+              extraDropdowns: Array.isArray(payload.settings.extraDropdowns)
+                ? payload.settings.extraDropdowns : []
+            }
+          : null,
         stepCount: 0,
         startedAt: Date.now()
       };
@@ -493,8 +502,9 @@
       sessionStorage.setItem('ps_form_capture_context_v1', JSON.stringify({
         kind,
         date: kind === 'ECC' ? date : '',
-        outcome: kind === 'ECC' && /\[Attempt\]/.test(note)
-          ? 'Attempt' : kind === 'ECC' ? 'Conversation' : ''
+        outcome: kind === 'SCC' ? state.outcome :
+          (state.outcome === 'ECC Attempt' || /\[Attempt\]/.test(note))
+            ? 'Attempt' : 'Conversation'
       }));
 
       sessionStorage.setItem(
@@ -780,17 +790,20 @@
   // FILL ECC OR STUDENT CONNECTION CALL LOG
   // ============================================================
 
-  async function getSccSelections(logType) {
-    const saved = await chrome.storage.local.get({
-      [SCC_TYPE_KEY]: '',
-      [SCC_SUBTYPE_KEY]: ''
-    });
-    if (saved[SCC_TYPE_KEY] && saved[SCC_SUBTYPE_KEY]) {
-      return {
-        typeValue: saved[SCC_TYPE_KEY],
-        subtypeValue: saved[SCC_SUBTYPE_KEY],
-        manual: false
-      };
+  async function getSccSelections(logType, manualOnly = false) {
+    if (!manualOnly) {
+      // Compatibility for older Apps Script handoffs without Settings values.
+      const saved = await chrome.storage.local.get({
+        [SCC_TYPE_KEY]: '',
+        [SCC_SUBTYPE_KEY]: ''
+      });
+      if (saved[SCC_TYPE_KEY] && saved[SCC_SUBTYPE_KEY]) {
+        return {
+          typeValue: saved[SCC_TYPE_KEY],
+          subtypeValue: saved[SCC_SUBTYPE_KEY],
+          manual: false
+        };
+      }
     }
 
     // The first time, the teacher chooses this school's SCC options in
@@ -817,6 +830,28 @@
     });
   }
 
+  function selectExtraDropdowns(logType, extraDropdowns) {
+    const scope = logType.closest('form') || document;
+    for (const entry of extraDropdowns) {
+      const name = String(entry?.name || '');
+      const value = String(entry?.value || '');
+      if (!/^[A-Za-z0-9_:-]{1,80}$/.test(name) || !value ||
+          /student|pupil|person|parent|guardian|contact|teacher|staff|school|section|course|email|phone|address|frn|date|month|day|year|calendar|time/i.test(name)) {
+        throw new Error('An additional dropdown in Settings has an unsupported field name.');
+      }
+      const target = [...scope.querySelectorAll('select')].find(select =>
+        (select.name === name || select.id === name) &&
+        select !== logType && select.name !== 'subtype'
+      );
+      if (!target || ![...target.options].some(option => option.value === value)) {
+        throw new Error('PowerSchool dropdown ' + name + ' or its configured choice is unavailable.');
+      }
+      target.value = value;
+      fireEvents(target);
+      if (target.value !== value) throw new Error('PowerSchool did not accept dropdown ' + name + '.');
+    }
+  }
+
   async function fillECCLog(state) {
     const kind = state.kind === 'SCC' ? 'SCC' : 'ECC';
     setECCButton(
@@ -827,14 +862,24 @@
       () => document.getElementById('logtype')
     );
 
-    const selections = kind === 'SCC'
-      ? await getSccSelections(logType)
-      : { typeValue: ECC_LOG_TYPE_VALUE, subtypeValue: ECC_SUBTYPE_VALUE, manual: false };
+    const settings = state.settings;
+    const configured = settings?.typeValue && settings?.subtypeValue;
+    let selections;
+    if (configured) {
+      selections = { typeValue: settings.typeValue, subtypeValue: settings.subtypeValue, manual: false };
+    } else if (kind === 'SCC') {
+      selections = await getSccSelections(logType, !!settings);
+    } else if (settings) {
+      throw new Error('Set both ECC Log Type and Subtype values in Instructions and Settings.');
+    } else {
+      selections = { typeValue: ECC_LOG_TYPE_VALUE, subtypeValue: ECC_SUBTYPE_VALUE, manual: false };
+    }
 
     if (!selections.manual) {
       if (![...logType.options].some(option => option.value === selections.typeValue)) {
         throw new Error(kind + ' Log Type is unavailable. ' +
-          (kind === 'SCC' ? 'Clear saved SCC selections in Extension options and choose again.' : 'Nothing was overwritten.'));
+          (settings ? 'Update the value in Instructions and Settings.' :
+            kind === 'SCC' ? 'Clear saved SCC selections in Extension options and choose again.' : 'Nothing was overwritten.'));
       }
       logType.value = selections.typeValue;
       fireEvents(logType);
@@ -847,10 +892,16 @@
     );
     if (![...subtype.options].some(option => option.value === selections.subtypeValue)) {
       throw new Error(kind + ' Log Subtype is unavailable. ' +
-        (kind === 'SCC' ? 'Clear saved SCC selections in Extension options and choose again.' : 'Nothing was overwritten.'));
+        (settings ? 'Update the value in Instructions and Settings.' :
+          kind === 'SCC' ? 'Clear saved SCC selections in Extension options and choose again.' : 'Nothing was overwritten.'));
     }
     subtype.value = selections.subtypeValue;
     fireEvents(subtype);
+
+    if (settings?.extraDropdowns?.length) {
+      await wait(300);
+      selectExtraDropdowns(logType, settings.extraDropdowns);
+    }
 
     if (logType.value !== selections.typeValue || subtype.value !== selections.subtypeValue) {
       throw new Error('PowerSchool did not accept the expected ' + kind + ' Log Type/Subtype.');
