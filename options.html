@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>ECC Helper: approved sheets</title>
+  <title>PowerSchool Helper settings</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     body { max-width: 700px; margin: 2rem auto; padding: 0 1rem; font: 16px/1.5 Arial, sans-serif; color: #202124; }
@@ -15,8 +15,8 @@
   </style>
 </head>
 <body>
-  <h1>ECC Helper: approved sheets</h1>
-  <p>Approve the Google Sheet where you enter ECC notes. Its ID stays in this browser.</p>
+  <h1>PowerSchool Helper settings</h1>
+  <p>Approve the Google Sheet where you enter ECC and Student Connection Call notes. Its ID stays in this browser.</p>
   <form id="add-sheet">
     <label for="sheet-url">Google Sheets URL</label>
     <input id="sheet-url" type="url" required placeholder="https://docs.google.com/spreadsheets/d/…/edit">
@@ -26,6 +26,10 @@
   <h2>Additional approved sheets</h2>
   <ul id="approved-sheets"></ul>
   <p>The original 2Roster ORN sheet remains approved. Refresh a sheet tab after adding it here or reloading the extension.</p>
+  <h2>Student Connection Call (SCC)</h2>
+  <p>On the first SCC handoff, choose the correct PowerSchool Log Type and Subtype on its New Log page, then click the blue SCC button. The extension remembers your selections in this browser. It never submits the log.</p>
+  <p id="scc-settings" aria-live="polite"></p>
+  <button id="forget-scc" type="button">Forget SCC selections</button>
   <script src="options.js"></script>
 </body>
 </html>
