@@ -28,11 +28,11 @@
   <ul id="approved-sheets"></ul>
   <p>The original 2Roster ORN sheet remains approved. Refresh a sheet tab after adding it here or reloading the extension.</p>
   <h2>Student Connection Call (SCC)</h2>
-  <p>On the first SCC handoff with this temporary build, choose the correct PowerSchool Log Type and Subtype on its New Log page, then click the blue SCC button. These selections survive extension reloads in this browser. Capture the form settings below so they can be built into a later release. The extension never submits the log.</p>
+  <p>For new handoffs, Type and Subtype come from the roster’s <a href="https://docs.google.com/spreadsheets/d/1_MpkySxTB6BYBB8In3ELRUsH2XpGjaeipMXxxGQb0To/edit#gid=1866668700" target="_blank" rel="noopener noreferrer">Instructions and Settings tab</a>. If a row has blank values, choose them manually on the PowerSchool New Log page. Saved browser choices below apply only to older handoffs. The extension never submits the log.</p>
   <p id="scc-settings" aria-live="polite"></p>
   <button id="forget-scc" type="button">Forget SCC selections</button>
   <h2>Temporary form settings captures</h2>
-  <p>On each PowerSchool New Log page, choose the actual form settings, open <strong>Capture PowerSchool settings</strong>, and capture SCC, ECC Conversation, and ECC Attempt. For ECC, choose a past call date in PowerSchool first. This records selected controls only and does not submit a log.</p>
+  <p>On each PowerSchool New Log page, choose the actual form settings, open <strong>Capture PowerSchool settings</strong>, and capture SCC Success, SCC Attempt, ECC Conversation, and ECC Attempt. Use <strong>Copy Type/Subtype for Settings</strong> to paste four cells into B:E of the matching Settings row. For ECC, choose a past call date in PowerSchool first and capture it for the later hardcoded date update. Capture does not submit a log.</p>
   <p>Paste each copied row into the next empty row of the <a href="https://docs.google.com/spreadsheets/d/1_MpkySxTB6BYBB8In3ELRUsH2XpGjaeipMXxxGQb0To/edit#gid=435380773" target="_blank" rel="noopener noreferrer">PowerSchool Settings Log</a>. Use Copy row below if the first clipboard attempt failed.</p>
   <ol id="captures"></ol>
   <script src="options.js"></script>
