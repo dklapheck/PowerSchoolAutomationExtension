@@ -9,7 +9,7 @@ const vm = require('node:vm');
 const source = fs.readFileSync(path.join(__dirname, '..', 'content.js'), 'utf8');
 const NOTE = 'On 9/18/2026, spoke with parent.';
 
-function fixture({ kind = 'SCC', stored = {}, original = 'PowerSchool header' } = {}) {
+function fixture({ kind = 'SCC', stored = {}, original = 'PowerSchool header', settings, outcome } = {}) {
   const elements = new Map();
   const session = new Map();
   const storage = { ...stored };
@@ -49,7 +49,7 @@ function fixture({ kind = 'SCC', stored = {}, original = 'PowerSchool header' } 
     createElement: () => makeElement()
   };
   const encoded = Buffer.from(JSON.stringify({
-    v: 1, studentNumber: '12345678', note: NOTE
+    v: 1, studentNumber: '12345678', note: NOTE, settings, outcome
   })).toString('base64url');
   const context = vm.createContext({
     document, location: { pathname: '/teachers/log.html', search: '', hash: '#' + kind.toLowerCase() + '=' + encoded },
@@ -124,5 +124,36 @@ test('ECC still uses its own type, subtype, and Note placeholder', async () => {
   assert.equal(env.logType.value, '1187');
   assert.equal(env.subtype.value, 'GE:ECC');
   assert.equal(env.noteBox.value, 'Contact: ' + NOTE);
+  assert.equal(env.submits, 0);
+});
+
+test('Settings handoff overrides remembered SCC choices', async () => {
+  const env = fixture({
+    stored: { sccLogTypeValue: '1187', sccLogSubtypeValue: 'GE:ECC' },
+    outcome: 'SCC Success',
+    settings: { typeValue: 'SCC_TYPE', subtypeValue: 'SCC_PARENT', extraDropdowns: [] }
+  });
+  await waitFor(() => env.button?.textContent === 'SCC ready — review & Submit');
+  assert.equal(env.logType.value, 'SCC_TYPE');
+  assert.equal(env.subtype.value, 'SCC_PARENT');
+  assert.equal(env.submits, 0);
+});
+
+test('blank SCC Settings prompt manual choices despite remembered selections', async () => {
+  const env = fixture({
+    stored: { sccLogTypeValue: '1187', sccLogSubtypeValue: 'GE:ECC' },
+    settings: { typeValue: '', subtypeValue: '', extraDropdowns: [] }
+  });
+  await waitFor(() => env.button?.textContent.includes('choose Type & Subtype'));
+  assert.equal(env.noteBox.value, 'PowerSchool header');
+  assert.equal(env.submits, 0);
+});
+
+test('unavailable configured choice leaves ECC note untouched', async () => {
+  const env = fixture({ kind: 'ECC', original: 'Contact: Note',
+    settings: { typeValue: '1187', subtypeValue: 'old_subtype', extraDropdowns: [] }
+  });
+  await waitFor(() => env.button?.textContent === 'ECC automation stopped');
+  assert.equal(env.noteBox.value, 'Contact: Note');
   assert.equal(env.submits, 0);
 });
