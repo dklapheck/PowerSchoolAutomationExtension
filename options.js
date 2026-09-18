@@ -96,7 +96,21 @@ async function render() {
         status.textContent = 'Clipboard failed: ' + (error?.message || String(error));
       }
     });
-    item.append(label, copy);
+    const copySettings = document.createElement('button');
+    copySettings.type = 'button';
+    copySettings.textContent = 'Copy Settings cells';
+    copySettings.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText([
+          capture.logType.value, capture.logType.text,
+          capture.subtype.value, capture.subtype.text
+        ].map(value => String(value ?? '').replace(/[\t\r\n]+/g, ' ').trim()).join('\t'));
+        status.textContent = 'Copied B:E values. Paste into the matching workflow row in Instructions and Settings.';
+      } catch (error) {
+        status.textContent = 'Clipboard failed: ' + (error?.message || String(error));
+      }
+    });
+    item.append(label, copy, copySettings);
     captureList.append(item);
   }
   if (!captures.length) {
