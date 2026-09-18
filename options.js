@@ -5,6 +5,8 @@ const form = document.getElementById('add-sheet');
 const input = document.getElementById('sheet-url');
 const list = document.getElementById('approved-sheets');
 const status = document.getElementById('status');
+const sccStatus = document.getElementById('scc-settings');
+const forgetScc = document.getElementById('forget-scc');
 
 function sheetIdFromUrl(text) {
   let url;
@@ -57,7 +59,23 @@ async function render() {
     item.textContent = 'No additional sheets approved.';
     list.append(item);
   }
+  const scc = await chrome.storage.local.get({ sccLogTypeLabel: '', sccLogSubtypeLabel: '' });
+  sccStatus.textContent = scc.sccLogTypeLabel && scc.sccLogSubtypeLabel
+    ? 'Saved: ' + scc.sccLogTypeLabel + ' / ' + scc.sccLogSubtypeLabel
+    : 'No SCC selections saved yet.';
 }
+
+forgetScc.addEventListener('click', async () => {
+  try {
+    await chrome.storage.local.remove([
+      'sccLogTypeValue', 'sccLogSubtypeValue', 'sccLogTypeLabel', 'sccLogSubtypeLabel'
+    ]);
+    status.textContent = 'SCC selections cleared. Choose them on the next PowerSchool SCC log.';
+    await render();
+  } catch (error) {
+    status.textContent = 'Could not clear SCC selections: ' + (error?.message || String(error));
+  }
+});
 
 form.addEventListener('submit', async event => {
   event.preventDefault();
