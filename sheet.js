@@ -1,11 +1,12 @@
 (() => {
   'use strict';
 
-  // This content script runs ONLY on the specific 2Roster ORN spreadsheet
-  // listed in manifest.json. It watches for the short-lived Apps Script
-  // handoff toast, then asks the extension service worker to open PowerSchool.
+  // Only locally approved roster spreadsheets watch for the Apps Script
+  // handoff toast and ask the service worker to open PowerSchool.
 
   const HANDOFF_PREFIX = 'ECC_HANDOFF_V1:';
+  // This previously supported sheet remains approved by default.
+  const LEGACY_ROSTER_ID = '1wJwz78LkACmNGxrrU6w6zOXy2zBZFeFElWg5PiCbm6g';
   const POWERSCHOOL_BASE =
     'https://californiak12.powerschool.com/teachers/home.html#ecc=';
 
@@ -114,24 +115,45 @@
     }
   }
 
-  const observer = new MutationObserver(mutations => {
-    for (const mutation of mutations) {
-      if (mutation.type === 'characterData') {
-        scanNode(mutation.target);
+  function startWatching() {
+    const observer = new MutationObserver(mutations => {
+      for (const mutation of mutations) {
+        if (mutation.type === 'characterData') {
+          scanNode(mutation.target);
+        }
+        for (const node of mutation.addedNodes) {
+          scanNode(node);
+        }
       }
+    });
 
-      for (const node of mutation.addedNodes) {
-        scanNode(node);
-      }
+    observer.observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+      characterData: true
+    });
+
+    // Catch a handoff toast that appeared just before the observer started.
+    scanNode(document.body);
+  }
+
+  const match = location.pathname.match(
+    /^\/spreadsheets\/(?:u\/\d+\/)?d\/([A-Za-z0-9_-]+)(?:\/|$)/
+  );
+  if (!match) return;
+
+  chrome.storage.local.get({ eccApprovedSpreadsheetIds: [] }, settings => {
+    if (chrome.runtime.lastError) {
+      console.error('[ECC Helper] Could not read approved sheets.',
+        chrome.runtime.lastError.message);
+      return;
+    }
+    const approved = Array.isArray(settings.eccApprovedSpreadsheetIds)
+      ? settings.eccApprovedSpreadsheetIds
+      : [];
+    // Unapproved sheets are never scanned for a handoff toast.
+    if (match[1] === LEGACY_ROSTER_ID || approved.includes(match[1])) {
+      startWatching();
     }
   });
-
-  observer.observe(document.documentElement, {
-    childList: true,
-    subtree: true,
-    characterData: true
-  });
-
-  // Catch a handoff toast that appeared just before the observer started.
-  scanNode(document.body);
 })();
