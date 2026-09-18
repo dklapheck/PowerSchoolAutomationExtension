@@ -28,6 +28,9 @@
   const ECC_BUTTON_ID = 'ps-ecc-status-button';
   const ECC_MAX_STEPS = 12;
 
+  const ERROR_PANEL_ID = 'ps-helper-error-panel';
+  const ERROR_STORAGE_KEY = 'ps_helper_last_error_v1';
+
   // PowerSchool ECC form values discovered on the live form.
   const ECC_LOG_TYPE_VALUE = '1187';   // Student Contact
   const ECC_SUBTYPE_VALUE = 'GE:ECC';  // GE:ECC Enduring Con. Call
@@ -84,6 +87,106 @@
     element.dispatchEvent(
       new Event('change', { bubbles: true })
     );
+  }
+
+  function showPersistentError(title, message) {
+    const record = {
+      title: String(title || 'PowerSchool Helper Error'),
+      message: String(message || 'Unknown error'),
+      time: new Date().toLocaleString()
+    };
+
+    sessionStorage.setItem(
+      ERROR_STORAGE_KEY,
+      JSON.stringify(record)
+    );
+
+    let panel = document.getElementById(ERROR_PANEL_ID);
+
+    if (!panel) {
+      panel = document.createElement('div');
+      panel.id = ERROR_PANEL_ID;
+
+      Object.assign(panel.style, {
+        position: 'fixed',
+        left: '16px',
+        bottom: '16px',
+        zIndex: '2147483647',
+        width: 'min(620px, calc(100vw - 32px))',
+        maxHeight: '45vh',
+        overflow: 'auto',
+        padding: '12px',
+        border: '2px solid #9c2f2f',
+        borderRadius: '8px',
+        background: '#fff7f7',
+        color: '#222',
+        fontFamily: 'Arial, sans-serif',
+        boxShadow: '0 4px 16px rgba(0,0,0,0.3)'
+      });
+
+      document.body.appendChild(panel);
+    }
+
+    panel.innerHTML = '';
+
+    const heading = document.createElement('div');
+    heading.textContent = record.title + ' · ' + record.time;
+    Object.assign(heading.style, {
+      fontWeight: '700',
+      marginBottom: '8px',
+      color: '#8b1f1f'
+    });
+
+    const text = document.createElement('pre');
+    text.textContent = record.message;
+    Object.assign(text.style, {
+      whiteSpace: 'pre-wrap',
+      userSelect: 'text',
+      margin: '0 0 10px 0',
+      fontFamily: 'Consolas, monospace',
+      fontSize: '12px'
+    });
+
+    const copy = document.createElement('button');
+    copy.type = 'button';
+    copy.textContent = 'Copy error';
+    copy.onclick = async () => {
+      try {
+        await navigator.clipboard.writeText(
+          record.title + '\n' + record.time + '\n\n' + record.message
+        );
+        copy.textContent = 'Copied';
+      } catch (_) {
+        text.focus?.();
+        window.getSelection()?.selectAllChildren(text);
+      }
+    };
+
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.textContent = 'Dismiss';
+    close.style.marginLeft = '8px';
+    close.onclick = () => {
+      sessionStorage.removeItem(ERROR_STORAGE_KEY);
+      panel.remove();
+    };
+
+    panel.appendChild(heading);
+    panel.appendChild(text);
+    panel.appendChild(copy);
+    panel.appendChild(close);
+  }
+
+  function restorePersistentError() {
+    const raw = sessionStorage.getItem(ERROR_STORAGE_KEY);
+    if (!raw) return;
+
+    try {
+      const record = JSON.parse(raw);
+      showPersistentError(record.title, record.message);
+    } catch (_) {
+      sessionStorage.removeItem(ERROR_STORAGE_KEY);
+    }
   }
 
   // ============================================================
@@ -258,9 +361,9 @@
 
       console.error('[PowerSchool OR010]', error);
 
-      window.alert(
-        'The OR010 shortcut could not finish.\n\n' +
-        (error?.message || String(error))
+      showPersistentError(
+        'OR010 shortcut could not finish',
+        error?.message || String(error)
       );
     }
   }
@@ -395,9 +498,9 @@
         error
       );
 
-      window.alert(
-        'The ECC handoff from Google Sheets could not be read.\n\n' +
-        (error?.message || String(error))
+      showPersistentError(
+        'ECC handoff from Google Sheets could not be read',
+        error?.message || String(error)
       );
 
       return null;
@@ -495,10 +598,9 @@
       button.onclick = () => button.remove();
     }
 
-    window.alert(
-      'The ECC automation stopped before submitting anything.\n\n' +
-      message +
-      '\n\nYou can continue manually in PowerSchool.'
+    showPersistentError(
+      'ECC automation stopped before submitting anything',
+      message + '\n\nYou can continue manually in PowerSchool.'
     );
   }
 
@@ -961,6 +1063,7 @@
   // ============================================================
 
   createOR010Button();
+  restorePersistentError();
 
   if (
     sessionStorage.getItem(OR010_PENDING_KEY) === 'yes'
