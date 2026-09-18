@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>ECC Helper: approved sheets</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { max-width: 700px; margin: 2rem auto; padding: 0 1rem; font: 16px/1.5 Arial, sans-serif; color: #202124; }
+    label { display: block; font-weight: bold; margin-top: 1rem; }
+    input { width: 100%; box-sizing: border-box; padding: .7rem; margin: .4rem 0; }
+    button { padding: .55rem .9rem; cursor: pointer; }
+    li { margin: .7rem 0; }
+    li button { margin-left: 1rem; }
+    #status { min-height: 1.5em; }
+  </style>
+</head>
+<body>
+  <h1>ECC Helper: approved sheets</h1>
+  <p>Approve the Google Sheet where you enter ECC notes. Its ID stays in this browser.</p>
+  <form id="add-sheet">
+    <label for="sheet-url">Google Sheets URL</label>
+    <input id="sheet-url" type="url" required placeholder="https://docs.google.com/spreadsheets/d/…/edit">
+    <button type="submit">Approve sheet</button>
+  </form>
+  <p id="status" role="status" aria-live="polite"></p>
+  <h2>Additional approved sheets</h2>
+  <ul id="approved-sheets"></ul>
+  <p>The original 2Roster ORN sheet remains approved. Refresh a sheet tab after adding it here or reloading the extension.</p>
+  <script src="options.js"></script>
+</body>
+</html>
