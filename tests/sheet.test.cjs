@@ -116,3 +116,18 @@ test('launch failure is visible without revealing the handoff payload', () => {
   assert.match(env.status, /could not open: Tab blocked/);
   assert.doesNotMatch(env.status, /abc_123/);
 });
+
+test('approved sheet opens the Student Connection Call handoff only once', () => {
+  const env = run({ approved: ['NEW-ROSTER'] });
+  const toast = new FakeElement();
+  toast.appendChild(new FakeText('SCC_HANDOFF_V1:'));
+  toast.appendChild(new FakeText('abc_123'));
+  env.observer.callback([{ type: 'childList', addedNodes: [toast] }]);
+  assert.equal(env.messages.length, 1);
+  assert.equal(env.messages[0].type, 'OPEN_POWERSCHOOL_SCC');
+  assert.equal(env.messages[0].url,
+    'https://californiak12.powerschool.com/teachers/home.html#scc=abc_123');
+  assert.equal(env.status, undefined);
+  env.observer.callback([{ type: 'childList', addedNodes: [toast] }]);
+  assert.equal(env.messages.length, 1);
+});

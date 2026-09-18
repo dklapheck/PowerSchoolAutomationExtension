@@ -2,7 +2,7 @@
   'use strict';
 
   // ============================================================
-  // PowerSchool OR010 + ECC Helper v3
+  // PowerSchool OR010 + ECC/SCC Helper v3
   //
   // Security / behavior:
   // - Runs only on PowerSchool teacher pages.
@@ -10,7 +10,7 @@
   // - Makes no outside network requests.
   // - ECC payload is removed from the URL immediately and kept
   //   only in PowerSchool sessionStorage during navigation.
-  // - The ECC workflow NEVER clicks Submit.
+  // - ECC and SCC workflows NEVER click Submit.
   // ============================================================
 
   const SONOMA_CODE = 'CAVA-SO';
@@ -27,6 +27,10 @@
   const ECC_STORAGE_KEY = 'ps_ecc_workflow_payload_v1';
   const ECC_BUTTON_ID = 'ps-ecc-status-button';
   const ECC_MAX_STEPS = 12;
+  const SCC_TYPE_KEY = 'sccLogTypeValue';
+  const SCC_SUBTYPE_KEY = 'sccLogSubtypeValue';
+  const SCC_TYPE_LABEL_KEY = 'sccLogTypeLabel';
+  const SCC_SUBTYPE_LABEL_KEY = 'sccLogSubtypeLabel';
 
   const ERROR_PANEL_ID = 'ps-helper-error-panel';
   const ERROR_STORAGE_KEY = 'ps_helper_last_error_v1';
@@ -433,11 +437,9 @@
 
   function importECCPayloadFromHash() {
     const hash = location.hash || '';
-    const marker = '#ecc=';
-
-    if (!hash.startsWith(marker)) {
-      return null;
-    }
+    const kind = hash.startsWith('#scc=') ? 'SCC' : 'ECC';
+    const marker = kind === 'SCC' ? '#scc=' : '#ecc=';
+    if (!hash.startsWith(marker)) return null;
 
     const encoded = hash.slice(marker.length);
 
@@ -473,11 +475,12 @@
 
       if (!note) {
         throw new Error(
-          'The ECC note is empty.'
+          'The ' + kind + ' note is empty.'
         );
       }
 
       const state = {
+        kind,
         studentNumber,
         date,
         note,
@@ -494,12 +497,12 @@
 
     } catch (error) {
       console.error(
-        '[PowerSchool ECC] Could not read ECC payload.',
+        '[PowerSchool ' + kind + '] Could not read handoff payload.',
         error
       );
 
       showPersistentError(
-        'ECC handoff from Google Sheets could not be read',
+        kind + ' handoff from Google Sheets could not be read',
         error?.message || String(error)
       );
 
@@ -574,6 +577,11 @@
       button.style.cursor = 'default';
       button.disabled = true;
 
+    } else if (mode === 'setup') {
+      button.style.background = '#174a75';
+      button.style.cursor = 'pointer';
+      button.disabled = false;
+
     } else if (mode === 'error') {
       button.style.background = '#9c2f2f';
       button.style.cursor = 'pointer';
@@ -587,10 +595,11 @@
   }
 
   function failECC(message) {
-    console.error('[PowerSchool ECC]', message);
+    const kind = loadECCState()?.kind === 'SCC' ? 'SCC' : 'ECC';
+    console.error('[PowerSchool ' + kind + ']', message);
 
     clearECCState();
-    setECCButton('ECC automation stopped', 'error');
+    setECCButton(kind + ' automation stopped', 'error');
 
     const button = getECCButton();
 
@@ -599,7 +608,7 @@
     }
 
     showPersistentError(
-      'ECC automation stopped before submitting anything',
+      kind + ' automation stopped before submitting anything',
       message + '\n\nYou can continue manually in PowerSchool.'
     );
   }
@@ -759,83 +768,151 @@
   }
 
   // ============================================================
-  // FILL ECC LOG
+  // FILL ECC OR STUDENT CONNECTION CALL LOG
   // ============================================================
 
+  async function getSccSelections(logType) {
+    const saved = await chrome.storage.local.get({
+      [SCC_TYPE_KEY]: '',
+      [SCC_SUBTYPE_KEY]: ''
+    });
+    if (saved[SCC_TYPE_KEY] && saved[SCC_SUBTYPE_KEY]) {
+      return {
+        typeValue: saved[SCC_TYPE_KEY],
+        subtypeValue: saved[SCC_SUBTYPE_KEY],
+        manual: false
+      };
+    }
+
+    // The first time, the teacher chooses this school's SCC options in
+    // PowerSchool. Do not guess values from ECC or from another school.
+    setECCButton('SCC: choose Type & Subtype, then click here', 'setup');
+    return new Promise(resolve => {
+      getECCButton().onclick = () => {
+        const subtype = document.querySelector('select[name="subtype"]');
+        const typeOption = logType.selectedOptions[0];
+        const subtypeOption = subtype?.selectedOptions[0];
+        if (!logType.value || !subtype?.value ||
+            typeOption?.disabled || subtypeOption?.disabled) {
+          showPersistentError('SCC selections needed',
+            'Choose the Student Connection Call Log Type and Subtype in PowerSchool, then click the blue SCC button.');
+          return;
+        }
+        getECCButton().onclick = null;
+        resolve({
+          typeValue: logType.value,
+          subtypeValue: subtype.value,
+          manual: true
+        });
+      };
+    });
+  }
+
   async function fillECCLog(state) {
+    const kind = state.kind === 'SCC' ? 'SCC' : 'ECC';
     setECCButton(
-      `Preparing ECC log · ${state.studentNumber}`
+      `Preparing ${kind} log · ${state.studentNumber}`
     );
 
     const logType = await waitFor(
       () => document.getElementById('logtype')
     );
 
-    logType.value = ECC_LOG_TYPE_VALUE;
-    fireEvents(logType);
+    const selections = kind === 'SCC'
+      ? await getSccSelections(logType)
+      : { typeValue: ECC_LOG_TYPE_VALUE, subtypeValue: ECC_SUBTYPE_VALUE, manual: false };
 
-    // PowerSchool may rebuild/update dependent fields.
-    await wait(500);
+    if (!selections.manual) {
+      if (![...logType.options].some(option => option.value === selections.typeValue)) {
+        throw new Error(kind + ' Log Type is unavailable. ' +
+          (kind === 'SCC' ? 'Clear saved SCC selections in Extension options and choose again.' : 'Nothing was overwritten.'));
+      }
+      logType.value = selections.typeValue;
+      fireEvents(logType);
+      // PowerSchool may rebuild/update dependent fields.
+      await wait(500);
+    }
 
     const subtype = await waitFor(
       () => document.querySelector('select[name="subtype"]')
     );
-
-    subtype.value = ECC_SUBTYPE_VALUE;
+    if (![...subtype.options].some(option => option.value === selections.subtypeValue)) {
+      throw new Error(kind + ' Log Subtype is unavailable. ' +
+        (kind === 'SCC' ? 'Clear saved SCC selections in Extension options and choose again.' : 'Nothing was overwritten.'));
+    }
+    subtype.value = selections.subtypeValue;
     fireEvents(subtype);
+
+    if (logType.value !== selections.typeValue || subtype.value !== selections.subtypeValue) {
+      throw new Error('PowerSchool did not accept the expected ' + kind + ' Log Type/Subtype.');
+    }
 
     // Give the subtype's Log Entry Text template time to populate.
     const noteBox = await waitFor(
       () => document.querySelector(ECC_NOTE_SELECTOR)
     );
 
-    let templatedNoteBox = null;
+    let templatedNoteBox = noteBox;
 
-    try {
-      templatedNoteBox = await waitFor(
-        () => {
-          const box = document.querySelector(ECC_NOTE_SELECTOR);
+    if (kind === 'ECC') {
+      try {
+        templatedNoteBox = await waitFor(
+          () => {
+            const box = document.querySelector(ECC_NOTE_SELECTOR);
 
-          return (
-            box && /\bNote\b/.test(String(box.value || ''))
-              ? box
-              : null
-          );
-        },
-        5000,
-        100
-      );
-    } catch (_) {
-      templatedNoteBox = noteBox;
+            return (
+              box && /\bNote\b/.test(String(box.value || ''))
+                ? box
+                : null
+            );
+          },
+          5000,
+          100
+        );
+      } catch (_) {
+        templatedNoteBox = noteBox;
+      }
+    } else {
+      await wait(500);
+      templatedNoteBox = document.querySelector(ECC_NOTE_SELECTOR) || noteBox;
     }
 
     const originalLogText = String(
       templatedNoteBox.value || ''
     );
 
-    // Preserve PowerSchool's template. Replace ONLY the first standalone
-    // literal "Note" placeholder with the ECC Note from the sheet.
-    if (!/\bNote\b/.test(originalLogText)) {
+    // ECC requires its known Note placeholder. SCC preserves any other
+    // PowerSchool template text and appends the call note for review.
+    if (kind === 'ECC' && !/\bNote\b/.test(originalLogText)) {
       throw new Error(
         'The Log Entry Text did not contain the expected "Note" placeholder. ' +
         'Nothing was overwritten.'
       );
     }
 
-    templatedNoteBox.value = originalLogText.replace(
-      /\bNote\b/,
-      state.note
-    );
+    templatedNoteBox.value = /\bNote\b/.test(originalLogText)
+      ? originalLogText.replace(/\bNote\b/, state.note)
+      : (originalLogText.trim()
+        ? originalLogText.trimEnd() + '\n\n' + state.note
+        : state.note);
 
     fireEvents(templatedNoteBox);
 
-    if (
-      logType.value !== ECC_LOG_TYPE_VALUE ||
-      subtype.value !== ECC_SUBTYPE_VALUE
-    ) {
-      throw new Error(
-        'PowerSchool did not accept the expected ECC Log Type/Subtype.'
-      );
+    // A subtype change may rebuild the controls or reset the note field.
+    await wait(200);
+    if (logType.value !== selections.typeValue ||
+        document.querySelector('select[name="subtype"]')?.value !== selections.subtypeValue ||
+        !String(document.querySelector(ECC_NOTE_SELECTOR)?.value || '').includes(state.note)) {
+      throw new Error('PowerSchool changed the ' + kind + ' log after it was prepared. Review the form manually.');
+    }
+
+    if (kind === 'SCC' && selections.manual) {
+      await chrome.storage.local.set({
+        [SCC_TYPE_KEY]: selections.typeValue,
+        [SCC_SUBTYPE_KEY]: selections.subtypeValue,
+        [SCC_TYPE_LABEL_KEY]: logType.selectedOptions[0]?.textContent?.trim() || '',
+        [SCC_SUBTYPE_LABEL_KEY]: subtype.selectedOptions[0]?.textContent?.trim() || ''
+      });
     }
 
     const selectedLogType =
@@ -844,7 +921,7 @@
     const selectedSubtype =
       subtype.selectedOptions[0]?.textContent?.trim() || '';
 
-    console.log('[PowerSchool ECC] Prepared:', {
+    console.log('[PowerSchool ' + kind + '] Prepared:', {
       studentNumber: state.studentNumber,
       date: state.date,
       logType: selectedLogType,
@@ -862,7 +939,7 @@
     templatedNoteBox.focus();
 
     setECCButton(
-      'ECC ready — review & Submit',
+      kind + ' ready — review & Submit',
       'ready'
     );
 
@@ -879,6 +956,8 @@
     if (!state) {
       return;
     }
+
+    const kind = state.kind === 'SCC' ? 'SCC' : 'ECC';
 
     state.stepCount = Number(state.stepCount || 0) + 1;
     saveECCState(state);
@@ -902,7 +981,7 @@
       // --------------------------------------------------------
       if (path.endsWith('/teachers/log.html')) {
         setECCButton(
-          `ECC · ${state.studentNumber} · preparing log`
+          `${kind} · ${state.studentNumber} · preparing log`
         );
 
         await fillECCLog(state);
@@ -918,7 +997,7 @@
         )
       ) {
         setECCButton(
-          `ECC · ${state.studentNumber} · finding New`
+          `${kind} · ${state.studentNumber} · finding New`
         );
 
         const newLogUrl = await waitFor(
@@ -933,7 +1012,7 @@
         );
 
         setECCButton(
-          `ECC · ${state.studentNumber} · opening New Log`
+          `${kind} · ${state.studentNumber} · opening New Log`
         );
 
         location.assign(newLogUrl);
@@ -946,7 +1025,7 @@
       // --------------------------------------------------------
       if (path.includes('/teachers/studentpages/')) {
         setECCButton(
-          `ECC · ${state.studentNumber} · finding Log Entries`
+          `${kind} · ${state.studentNumber} · finding Log Entries`
         );
 
         const logEntriesUrl = await waitFor(
@@ -961,7 +1040,7 @@
         );
 
         setECCButton(
-          `ECC · ${state.studentNumber} · opening Log Entries`
+          `${kind} · ${state.studentNumber} · opening Log Entries`
         );
 
         location.assign(logEntriesUrl);
@@ -977,7 +1056,7 @@
         path.endsWith('/teachers/studentsearchresults.html')
       ) {
         setECCButton(
-          `ECC · ${state.studentNumber} · finding student`
+          `${kind} · ${state.studentNumber} · finding student`
         );
 
         const row = await waitFor(
@@ -1003,7 +1082,7 @@
           );
 
           setECCButton(
-            `ECC · ${state.studentNumber} · opening Log Entries`
+            `${kind} · ${state.studentNumber} · opening Log Entries`
           );
 
           location.assign(directLogUrl);
@@ -1013,7 +1092,7 @@
         // Safe fallback: force same-tab navigation so sessionStorage
         // survives. Do not use studentLink.click().
         setECCButton(
-          `ECC · ${state.studentNumber} · opening student`
+          `${kind} · ${state.studentNumber} · opening student`
         );
 
         location.assign(studentLink.href);
@@ -1024,7 +1103,7 @@
       // 5. BEFORE SEARCHING: ENSURE SONOMA
       // --------------------------------------------------------
       setECCButton(
-        `ECC · ${state.studentNumber} · checking Sonoma`
+          `${kind} · ${state.studentNumber} · checking Sonoma`
       );
 
       await waitFor(
@@ -1035,7 +1114,7 @@
 
       if (!currentSchoolIsSonoma()) {
         setECCButton(
-          `ECC · ${state.studentNumber} · switching to Sonoma`
+          `${kind} · ${state.studentNumber} · switching to Sonoma`
         );
 
         await switchToSonoma();
@@ -1046,7 +1125,7 @@
       // 6. SEARCH BY STUDENT NUMBER
       // --------------------------------------------------------
       setECCButton(
-        `ECC · ${state.studentNumber} · searching student`
+          `${kind} · ${state.studentNumber} · searching student`
       );
 
       submitStudentNumberSearch(state.studentNumber);

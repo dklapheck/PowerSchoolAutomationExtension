@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "PowerSchool OR010 + ECC Helper",
-  "version": "3.1.2",
-  "description": "Adds the OR010 shortcut and prepares ECC logs from locally approved Google Sheets.",
+  "name": "PowerSchool OR010 + ECC/SCC Helper",
+  "version": "3.2.0",
+  "description": "Adds the OR010 shortcut and prepares ECC and SCC logs from locally approved Google Sheets.",
   "background": {
     "service_worker": "background.js"
   },
