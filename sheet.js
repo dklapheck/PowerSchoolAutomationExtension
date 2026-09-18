@@ -9,7 +9,7 @@
   const STATUS_ID = 'ecc-helper-status';
   let lastEncoded = '';
 
-  function showStatus(message, error = false) {
+  function showError(message) {
     let badge = document.getElementById(STATUS_ID);
     if (!badge) {
       badge = document.createElement('div');
@@ -30,7 +30,7 @@
       });
       document.body.appendChild(badge);
     }
-    badge.style.backgroundColor = error ? '#9c2f2f' : '#217346';
+    badge.style.backgroundColor = '#9c2f2f';
     badge.textContent = message;
   }
 
@@ -67,7 +67,6 @@
 
     lastEncoded = encoded;
     replaceVisibleMarker(node);
-    showStatus('ECC handoff detected; opening PowerSchool…');
     chrome.runtime.sendMessage({
       type: 'OPEN_POWERSCHOOL_ECC',
       url: POWERSCHOOL_BASE + encoded
@@ -76,10 +75,9 @@
         const reason = chrome.runtime.lastError?.message ||
           response?.error || 'Unknown error';
         console.error('[ECC Helper] PowerSchool launch failed:', reason);
-        showStatus('ECC handoff detected, but PowerSchool could not open: ' + reason, true);
+        showError('ECC handoff detected, but PowerSchool could not open: ' + reason);
         return;
       }
-      showStatus('PowerSchool tab opened. Review the ECC log before submitting.');
     });
   }
 
@@ -102,7 +100,6 @@
   }
 
   function startWatching() {
-    showStatus('ECC Helper active on this sheet.');
     const observer = new MutationObserver(mutations => {
       for (const mutation of mutations) {
         if (mutation.type === 'characterData') scanNode(mutation.target);

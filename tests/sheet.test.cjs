@@ -93,9 +93,9 @@ test('unapproved sheet has no watcher and does not inspect a handoff', () => {
   assert.equal(env.messages.length, 0);
 });
 
-test('approved sheet shows active state and opens a split toast only once', () => {
+test('approved sheet opens a split toast once without covering controls', () => {
   const env = run({ approved: ['NEW-ROSTER'] });
-  assert.equal(env.status, 'ECC Helper active on this sheet.');
+  assert.equal(env.status, undefined);
   const toast = new FakeElement();
   toast.appendChild(new FakeText('ECC_HANDOFF_V1:'));
   toast.appendChild(new FakeText('abc_123'));
@@ -103,7 +103,7 @@ test('approved sheet shows active state and opens a split toast only once', () =
   assert.equal(env.messages.length, 1);
   assert.equal(env.messages[0].url,
     'https://californiak12.powerschool.com/teachers/home.html#ecc=abc_123');
-  assert.match(env.status, /PowerSchool tab opened/);
+  assert.equal(env.status, undefined);
   env.observer.callback([{ type: 'childList', addedNodes: [toast] }]);
   assert.equal(env.messages.length, 1);
 });
