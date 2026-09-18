@@ -19,6 +19,18 @@ The extension watches for ECC and SCC handoffs on approved sheets without adding
 
 The extension cannot verify which school-specific selections are correct; confirm them on the first log and review each prepared log before submitting. If PowerSchool cannot prepare the log, it stops and shows an error without submitting.
 
+## Temporary settings capture (3.2.1)
+
+This temporary build records your school's actual PowerSchool choices so the next extension release can use permanent Type, Subtype, ECC outcome and date selections. A browser reload retains the captures, but the captured settings are not yet built into the automation.
+
+1. Install this branch's files into your unpacked extension folder, reload the extension at `chrome://extensions`, and refresh the PowerSchool tab.
+2. On the PowerSchool **New Log** page for an SCC, choose the right Type and Subtype (and any other needed dropdowns). Expand **Capture PowerSchool settings (temporary tool)** next to Log Type, select **SCC**, then click **Capture selected settings**. The button reads the form and never submits.
+3. Open the [PowerSchool Settings Log](https://docs.google.com/spreadsheets/d/1_MpkySxTB6BYBB8In3ELRUsH2XpGjaeipMXxxGQb0To/edit#gid=435380773), click the first empty cell in column A, and paste the copied row. If the clipboard did not work, use **Extension options > Temporary form settings captures > Copy row**.
+4. Repeat for an ECC **Conversation (successful)** and an ECC **Attempt (unsuccessful)**. For at least one ECC, choose an actual past call date using PowerSchool's date controls before capturing, and verify the requested date shown in the capture panel. Paste each captured row into the next empty row.
+5. Let us know after all three rows are in the log. We can inspect the real selected values and date control options, then make a separate permanent extension update.
+
+The recorder stores up to 20 selected-settings snapshots in extension storage; it does not store student numbers, note text, or free-text fields. This temporary release does not apply a past ECC date automatically. Review every prepared log before submitting.
+
 The original 2Roster ORN sheet is approved automatically. If the encoded toast appears without opening PowerSchool, confirm you approved the correct sheet URL, reloaded the unpacked extension and refreshed the sheet tab. Updating files on GitHub alone does not update an installed extension.
 
 If PowerSchool opens but the log is not prepared, check the visible error before proceeding manually. The browser console also logs messages prefixed `[PowerSchool ECC]` or `[PowerSchool SCC]`. The extension does not click Submit.
