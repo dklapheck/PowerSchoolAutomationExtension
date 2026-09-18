@@ -11,25 +11,25 @@ This extension prepares PowerSchool ECC and Student Connection Call (SCC) logs f
 
 The extension watches for ECC and SCC handoffs on approved sheets without adding a persistent notification over Google Sheets. It opens a PowerSchool tab when a handoff is detected and shows an error only if the tab cannot be opened.
 
-## First Student Connection Call
+## Student Connection Call settings
 
 1. In **Call Entry**, choose the student, record the call and use **Teacher Tools > Save Student Connection Call & Open PowerSchool**. The SCC note saves to the SCC tab before the PowerSchool handoff. An unsuccessful call uses the next available Attempt column.
-2. On the PowerSchool New Log page, select the **Log Type** and **Subtype** appropriate for a Student Connection Call. These differ from ECC. Click the blue **SCC: choose Type & Subtype, then click here** button.
-3. The extension inserts the call note while preserving PowerSchool's template, and remembers your selected Type and Subtype for future SCC logs. Review the entire log and click **Submit** yourself. To change the saved selections, use **Extension options > Forget SCC selections**.
+2. On **Instructions and Settings** in the roster, use the four rows **SCC Success**, **SCC Attempt**, **ECC Conversation**, and **ECC Attempt**. Enter the exact PowerSchool Log Type value in column B and Subtype value in D. Columns C and E are labels for reference. The extension reads the row sent with each handoff; edits take effect on the next call without reinstalling. If an SCC row is blank, select Type/Subtype manually on PowerSchool and click the blue SCC button.
+3. The extension inserts the call note while preserving PowerSchool's template. Review the entire log and click **Submit** yourself. Older Apps Script handoffs without Settings values can still use previously remembered browser selections.
 
 The extension cannot verify which school-specific selections are correct; confirm them on the first log and review each prepared log before submitting. If PowerSchool cannot prepare the log, it stops and shows an error without submitting.
 
-## Temporary settings capture (3.2.1)
+## Temporary settings capture (3.2.2)
 
-This temporary build records your school's actual PowerSchool choices so the next extension release can use permanent Type, Subtype, ECC outcome and date selections. A browser reload retains the captures, but the captured settings are not yet built into the automation.
+This build reads Type/Subtype and optional additional dropdown choices from the roster's Settings tab. The temporary recorder helps you obtain exact option values and identify PowerSchool's ECC date controls. Captures survive a browser reload; ECC date selection is still awaiting a separate code update based on those captures.
 
 1. Install this branch's files into your unpacked extension folder, reload the extension at `chrome://extensions`, and refresh the PowerSchool tab.
-2. On the PowerSchool **New Log** page for an SCC, choose the right Type and Subtype (and any other needed dropdowns). Expand **Capture PowerSchool settings (temporary tool)** next to Log Type, select **SCC**, then click **Capture selected settings**. The button reads the form and never submits.
-3. Open the [PowerSchool Settings Log](https://docs.google.com/spreadsheets/d/1_MpkySxTB6BYBB8In3ELRUsH2XpGjaeipMXxxGQb0To/edit#gid=435380773), click the first empty cell in column A, and paste the copied row. If the clipboard did not work, use **Extension options > Temporary form settings captures > Copy row**.
-4. Repeat for an ECC **Conversation (successful)** and an ECC **Attempt (unsuccessful)**. For at least one ECC, choose an actual past call date using PowerSchool's date controls before capturing, and verify the requested date shown in the capture panel. Paste each captured row into the next empty row.
-5. Let us know after all three rows are in the log. We can inspect the real selected values and date control options, then make a separate permanent extension update.
+2. On the PowerSchool **New Log** page, choose the correct Type/Subtype and any other needed dropdowns. Expand **Capture PowerSchool settings (temporary tool)** next to Log Type, choose the matching scenario, then click **Capture selected settings**. The button reads the form and never submits.
+3. Click **Copy Type/Subtype for Settings** and paste into column **B** of that scenario's row in [Instructions and Settings](https://docs.google.com/spreadsheets/d/1_MpkySxTB6BYBB8In3ELRUsH2XpGjaeipMXxxGQb0To/edit#gid=1866668700): SCC Success row 35, SCC Attempt 36, ECC Conversation 37, ECC Attempt 38. This fills B:E. For extra dropdowns, column F optionally accepts valid JSON such as `[{"name":"result","value":"no_answer"}]`.
+4. Paste the full captured row into the next empty row of the [PowerSchool Settings Log](https://docs.google.com/spreadsheets/d/1_MpkySxTB6BYBB8In3ELRUsH2XpGjaeipMXxxGQb0To/edit#gid=435380773). If copying fails, use **Extension options > Temporary form settings captures > Copy row** or **Copy Settings cells**.
+5. Repeat for all four scenarios. For at least one ECC, select an actual past call date in PowerSchool before capturing, and check the requested date in the panel. Once the date controls are recorded, we can hardcode the ECC date behavior in the extension.
 
-The recorder stores up to 20 selected-settings snapshots in extension storage; it does not store student numbers, note text, or free-text fields. This temporary release does not apply a past ECC date automatically. Review every prepared log before submitting.
+The recorder stores up to 20 selected-settings snapshots in extension storage; it does not store student numbers, note text, or free-text fields. This release does not apply a past ECC date automatically. Review every prepared log before submitting.
 
 The original 2Roster ORN sheet is approved automatically. If the encoded toast appears without opening PowerSchool, confirm you approved the correct sheet URL, reloaded the unpacked extension and refreshed the sheet tab. Updating files on GitHub alone does not update an installed extension.
 
