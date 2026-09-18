@@ -488,6 +488,15 @@
         startedAt: Date.now()
       };
 
+      // Keep only non-student form context for the temporary settings capture.
+      // The note and student number remain in the short-lived workflow state.
+      sessionStorage.setItem('ps_form_capture_context_v1', JSON.stringify({
+        kind,
+        date: kind === 'ECC' ? date : '',
+        outcome: kind === 'ECC' && /\[Attempt\]/.test(note)
+          ? 'Attempt' : kind === 'ECC' ? 'Conversation' : ''
+      }));
+
       sessionStorage.setItem(
         ECC_STORAGE_KEY,
         JSON.stringify(state)
