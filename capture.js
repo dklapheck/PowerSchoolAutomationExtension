@@ -114,7 +114,8 @@
     scenarioLabel.textContent = 'Call scenario ';
     const scenario = document.createElement('select');
     for (const [value, label] of [
-      ['SCC', 'SCC'], ['Conversation', 'ECC Conversation (successful)'],
+      ['SCC Success', 'SCC Success'], ['SCC Attempt', 'SCC Attempt'],
+      ['Conversation', 'ECC Conversation (successful)'],
       ['Attempt', 'ECC Attempt (unsuccessful)']
     ]) {
       const option = document.createElement('option');
@@ -123,7 +124,8 @@
       scenario.append(option);
     }
     const context = readContext();
-    scenario.value = context.kind === 'SCC' ? 'SCC' :
+    scenario.value = context.kind === 'SCC'
+      ? context.outcome === 'SCC Attempt' ? 'SCC Attempt' : 'SCC Success' :
       context.outcome === 'Attempt' ? 'Attempt' : 'Conversation';
     scenarioLabel.append(scenario);
     details.append(scenarioLabel);
@@ -141,6 +143,10 @@
     const button = document.createElement('button');
     button.type = 'button';
     button.textContent = 'Capture selected settings';
+    const copySettings = document.createElement('button');
+    copySettings.type = 'button';
+    copySettings.textContent = 'Copy Type/Subtype for Settings';
+    copySettings.style.marginLeft = '8px';
     const status = document.createElement('p');
     status.setAttribute('role', 'status');
     const link = document.createElement('a');
@@ -148,18 +154,19 @@
     link.target = '_blank';
     link.rel = 'noopener noreferrer';
     link.textContent = 'PowerSchool Settings Log';
-    details.append(button, status, link);
+    details.append(button, copySettings, status, link);
     host.append(details);
     logType.parentElement.insertAdjacentElement('afterend', host);
 
     button.addEventListener('click', async () => {
       try {
         const settings = snapshot(scope, host);
-        const outcome = scenario.value === 'SCC' ? '' : scenario.value;
+        const isScc = scenario.value.startsWith('SCC ');
+        const outcome = isScc ? '' : scenario.value;
         const record = {
           schemaVersion: 1,
           capturedAt: new Date().toISOString(),
-          workflow: outcome ? 'ECC' : 'SCC',
+          workflow: isScc ? scenario.value : 'ECC',
           eccOutcome: outcome,
           requestedEccDate: outcome ? clean(dateInput.value, 32) : '',
           ...settings
@@ -175,6 +182,18 @@
         }
       } catch (error) {
         status.textContent = 'Could not capture: ' + (error?.message || String(error));
+      }
+    });
+    copySettings.addEventListener('click', async () => {
+      try {
+        const settings = snapshot(scope, host);
+        await navigator.clipboard.writeText([
+          settings.logType.value, settings.logType.text,
+          settings.subtype.value, settings.subtype.text
+        ].map(value => clean(value)).join('\t'));
+        status.textContent = 'Copied four cells. Paste into column B of the matching row in Instructions and Settings (SCC Success row 35, SCC Attempt 36, ECC Conversation 37, ECC Attempt 38).';
+      } catch (error) {
+        status.textContent = 'Could not copy Settings cells: ' + (error?.message || String(error));
       }
     });
     return true;
