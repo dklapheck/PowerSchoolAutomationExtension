@@ -1,13 +1,11 @@
 {
   "manifest_version": 3,
   "name": "PowerSchool OR010 + ECC Helper",
-  "version": "3.0.1",
-  "description": "Adds the OR010 shortcut and prepares ECC logs from the 2Roster ORN Google Sheet.",
-
+  "version": "3.1.0",
+  "description": "Adds the OR010 shortcut and prepares ECC logs from locally approved Google Sheets.",
   "background": {
     "service_worker": "background.js"
   },
-
   "content_scripts": [
     {
       "matches": [
@@ -20,13 +18,19 @@
     },
     {
       "matches": [
-        "https://docs.google.com/spreadsheets/d/1wJwz78LkACmNGxrrU6w6zOXy2zBZFeFElWg5PiCbm6g/*",
-        "https://docs.google.com/spreadsheets/u/*/d/1wJwz78LkACmNGxrrU6w6zOXy2zBZFeFElWg5PiCbm6g/*"
+        "https://docs.google.com/spreadsheets/*"
       ],
       "js": [
         "sheet.js"
       ],
       "run_at": "document_idle"
     }
-  ]
+  ],
+  "permissions": [
+    "storage"
+  ],
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  }
 }
