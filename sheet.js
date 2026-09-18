@@ -1,11 +1,14 @@
 (() => {
   'use strict';
 
-  const HANDOFF_PREFIX = 'ECC_HANDOFF_V1:';
+  const HANDOFFS = [
+    { prefix: 'ECC_HANDOFF_V1:', kind: 'ECC', hash: 'ecc=' },
+    { prefix: 'SCC_HANDOFF_V1:', kind: 'SCC', hash: 'scc=' }
+  ];
   // The previously supported sheet remains approved by default.
   const LEGACY_ROSTER_ID = '1wJwz78LkACmNGxrrU6w6zOXy2zBZFeFElWg5PiCbm6g';
   const POWERSCHOOL_BASE =
-    'https://californiak12.powerschool.com/teachers/home.html#ecc=';
+    'https://californiak12.powerschool.com/teachers/home.html#';
   const STATUS_ID = 'ecc-helper-status';
   let lastEncoded = '';
 
@@ -36,22 +39,28 @@
 
   function extractHandoff(text) {
     const value = String(text || '');
-    const index = value.indexOf(HANDOFF_PREFIX);
-    if (index < 0) return null;
-    const afterPrefix = value.slice(index + HANDOFF_PREFIX.length);
-    const match = afterPrefix.match(/^([A-Za-z0-9_-]+)/);
-    return match ? match[1] : null;
+    for (const handoff of HANDOFFS) {
+      const index = value.indexOf(handoff.prefix);
+      if (index < 0) continue;
+      const afterPrefix = value.slice(index + handoff.prefix.length);
+      const match = afterPrefix.match(/^([A-Za-z0-9_-]+)/);
+      if (match) return { ...handoff, encoded: match[1] };
+    }
+    return null;
   }
 
   function replaceVisibleMarker(node) {
-    const friendly = 'Opening PowerSchool ECC log…';
+    const handoff = extractHandoff(node.nodeType === Node.TEXT_NODE
+      ? node.nodeValue : node.textContent);
+    if (!handoff) return;
+    const friendly = 'Opening PowerSchool ' + handoff.kind + ' log…';
     if (node.nodeType === Node.TEXT_NODE) {
-      if (String(node.nodeValue || '').includes(HANDOFF_PREFIX)) {
+      if (String(node.nodeValue || '').includes(handoff.prefix)) {
         node.nodeValue = friendly;
       }
     } else if (node instanceof HTMLElement &&
         node.childElementCount === 0 &&
-        String(node.textContent || '').includes(HANDOFF_PREFIX)) {
+        String(node.textContent || '').includes(handoff.prefix)) {
       node.textContent = friendly;
     }
   }
@@ -62,20 +71,20 @@
       : node.textContent;
     // Avoid scanning the entire spreadsheet DOM as one string.
     if (typeof value !== 'string' || value.length > 20000) return;
-    const encoded = extractHandoff(value);
-    if (!encoded || encoded === lastEncoded) return;
+    const handoff = extractHandoff(value);
+    if (!handoff || handoff.kind + handoff.encoded === lastEncoded) return;
 
-    lastEncoded = encoded;
+    lastEncoded = handoff.kind + handoff.encoded;
     replaceVisibleMarker(node);
     chrome.runtime.sendMessage({
-      type: 'OPEN_POWERSCHOOL_ECC',
-      url: POWERSCHOOL_BASE + encoded
+      type: 'OPEN_POWERSCHOOL_' + handoff.kind,
+      url: POWERSCHOOL_BASE + handoff.hash + handoff.encoded
     }, response => {
       if (chrome.runtime.lastError || !response?.ok) {
         const reason = chrome.runtime.lastError?.message ||
           response?.error || 'Unknown error';
-        console.error('[ECC Helper] PowerSchool launch failed:', reason);
-        showError('ECC handoff detected, but PowerSchool could not open: ' + reason);
+        console.error('[PowerSchool Helper] PowerSchool launch failed:', reason);
+        showError(handoff.kind + ' handoff detected, but PowerSchool could not open: ' + reason);
         return;
       }
     });
