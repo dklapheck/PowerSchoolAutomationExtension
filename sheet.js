@@ -10,7 +10,9 @@
   const POWERSCHOOL_BASE =
     'https://californiak12.powerschool.com/teachers/home.html#';
   const STATUS_ID = 'ecc-helper-status';
-  let lastEncoded = '';
+  const HANDOFF_DEDUPE_MS = 1500;
+  let lastHandoffKey = '';
+  let lastHandoffAt = 0;
 
   function showError(message) {
     let badge = document.getElementById(STATUS_ID);
@@ -72,9 +74,18 @@
     // Avoid scanning the entire spreadsheet DOM as one string.
     if (typeof value !== 'string' || value.length > 20000) return;
     const handoff = extractHandoff(value);
-    if (!handoff || handoff.kind + handoff.encoded === lastEncoded) return;
+    if (!handoff) return;
 
-    lastEncoded = handoff.kind + handoff.encoded;
+    const handoffKey = handoff.kind + handoff.encoded;
+    const now = Date.now();
+    if (handoffKey === lastHandoffKey &&
+        now - lastHandoffAt < HANDOFF_DEDUPE_MS) return;
+
+    // A Sheets toast can be reported through several nested DOM mutations.
+    // Suppress that brief burst, but allow the teacher to retry the exact
+    // same handoff after the toast is shown again.
+    lastHandoffKey = handoffKey;
+    lastHandoffAt = now;
     replaceVisibleMarker(node);
     chrome.runtime.sendMessage({
       type: 'OPEN_POWERSCHOOL_' + handoff.kind,
