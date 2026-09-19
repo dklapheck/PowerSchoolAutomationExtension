@@ -34,6 +34,8 @@
 
   const ERROR_PANEL_ID = 'ps-helper-error-panel';
   const ERROR_STORAGE_KEY = 'ps_helper_last_error_v1';
+  let eccWorkflowRunning = false;
+  let signInObserver = null;
 
   // PowerSchool ECC form values discovered on the live form.
   const ECC_LOG_TYPE_VALUE = '1187';   // Student Contact
@@ -1010,7 +1012,42 @@
   // MAIN ECC WORKFLOW
   // ============================================================
 
+  function pauseForPowerSchoolSignIn(kind) {
+    setECCButton(
+      kind + ' saved — sign in; this tab will continue automatically',
+      'setup'
+    );
+
+    const button = getECCButton();
+    if (button) button.onclick = () => continueECCWorkflow();
+    if (signInObserver) return;
+
+    signInObserver = new MutationObserver(() => {
+      if (!getSchoolPicker()) return;
+      signInObserver.disconnect();
+      signInObserver = null;
+      // Let the current DOM mutation finish before resuming the workflow.
+      setTimeout(() => continueECCWorkflow(), 0);
+    });
+    signInObserver.observe(document.documentElement, {
+      childList: true,
+      subtree: true
+    });
+
+    // Cover the narrow race where the authenticated shell appeared between
+    // the initial check and observer installation.
+    if (getSchoolPicker()) {
+      signInObserver.disconnect();
+      signInObserver = null;
+      setTimeout(() => continueECCWorkflow(), 0);
+    }
+  }
+
   async function continueECCWorkflow() {
+    if (eccWorkflowRunning) return;
+    eccWorkflowRunning = true;
+
+    try {
     const state = loadECCState();
 
     if (!state) {
@@ -1018,6 +1055,20 @@
     }
 
     const kind = state.kind === 'SCC' ? 'SCC' : 'ECC';
+    const path = location.pathname.toLowerCase();
+    const isWorkflowPage =
+      path.endsWith('/teachers/log.html') ||
+      path.includes('/teachers/studentpages/') ||
+      path.endsWith('/teachers/studentsearchresults.html');
+
+    // A handoff can arrive at the PowerSchool sign-in screen. Do not count
+    // sign-in redirects as workflow steps or clear the payload after the old
+    // 10-second page timeout. Wait for the authenticated teacher shell, while
+    // sessionStorage carries the handoff through same-tab navigation.
+    if (!isWorkflowPage && !getSchoolPicker()) {
+      pauseForPowerSchoolSignIn(kind);
+      return;
+    }
 
     state.stepCount = Number(state.stepCount || 0) + 1;
     saveECCState(state);
@@ -1028,8 +1079,6 @@
     }
 
     try {
-      const path = location.pathname.toLowerCase();
-
       console.log('[PowerSchool ECC] Continuing workflow:', {
         path: location.pathname,
         studentNumber: state.studentNumber,
@@ -1195,22 +1244,44 @@
         error?.message || String(error)
       );
     }
+    } finally {
+      eccWorkflowRunning = false;
+    }
   }
 
   // ============================================================
   // STARTUP
   // ============================================================
 
-  createOR010Button();
-  restorePersistentError();
+  const isTeacherPage = location.pathname.toLowerCase()
+    .startsWith('/teachers/');
 
-  if (
-    sessionStorage.getItem(OR010_PENDING_KEY) === 'yes'
-  ) {
-    continueOR010Workflow();
+  if (isTeacherPage) {
+    createOR010Button();
+    restorePersistentError();
+
+    if (
+      sessionStorage.getItem(OR010_PENDING_KEY) === 'yes'
+    ) {
+      continueOR010Workflow();
+    }
   }
 
   importECCPayloadFromHash();
+
+  // PowerSchool may redirect an unauthenticated teacher request to /public/.
+  // Capture the hash there before the login form removes it. The same tab's
+  // sessionStorage survives the sign-in round trip back to /teachers/.
+  if (!isTeacherPage) {
+    const pending = loadECCState();
+    if (pending) {
+      const kind = pending.kind === 'SCC' ? 'SCC' : 'ECC';
+      setECCButton(
+        kind + ' handoff saved — sign in to continue'
+      );
+    }
+    return;
+  }
 
   if (loadECCState()) {
     continueECCWorkflow();

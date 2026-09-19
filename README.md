@@ -11,6 +11,10 @@ This extension prepares PowerSchool ECC and Student Connection Call (SCC) logs f
 
 The extension watches for ECC and SCC handoffs on approved sheets without adding a persistent notification over Google Sheets. It opens a PowerSchool tab when a handoff is detected and shows an error only if the tab cannot be opened.
 
+## Login and retry behavior (3.2.3)
+
+If PowerSchool asks you to sign in, the extension saves the pending ECC or SCC handoff in that PowerSchool tab and resumes after the authenticated teacher page returns. Complete sign-in in the same tab. An identical handoff can also be retried from Google Sheets; only the brief duplicate burst produced by one Sheets toast is ignored.
+
 ## Student Connection Call settings
 
 1. In **Call Entry**, choose the student, record the call and use **Teacher Tools > Save Student Connection Call & Open PowerSchool**. The SCC note saves to the SCC tab before the PowerSchool handoff. An unsuccessful call uses the next available Attempt column.

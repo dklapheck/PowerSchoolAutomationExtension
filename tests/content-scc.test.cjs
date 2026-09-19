@@ -9,12 +9,18 @@ const vm = require('node:vm');
 const source = fs.readFileSync(path.join(__dirname, '..', 'content.js'), 'utf8');
 const NOTE = 'On 9/18/2026, spoke with parent.';
 
-function fixture({ kind = 'SCC', stored = {}, original = 'PowerSchool header', settings, outcome } = {}) {
+function fixture({
+  kind = 'SCC', stored = {}, sessionStored = {},
+  original = 'PowerSchool header', settings, outcome,
+  pathname = '/teachers/log.html', hash
+} = {}) {
   const elements = new Map();
-  const session = new Map();
+  const session = new Map(Object.entries(sessionStored));
   const storage = { ...stored };
   const body = { appendChild(el) { if (el.id) elements.set(el.id, el); } };
   let submits = 0;
+  let authenticated = false;
+  let signInObserver = null;
   const makeElement = () => ({
     style: {},
     children: [],
@@ -40,9 +46,12 @@ function fixture({ kind = 'SCC', stored = {}, original = 'PowerSchool header', s
   const subtype = makeSelect([['', 'Choose Subtype'], ['GE:ECC', 'ECC'], ['SCC_PARENT', 'Parent Connection Call']]);
   const noteBox = makeElement();
   noteBox.value = original;
+  const schoolPicker = { textContent: 'CAVA-SO' };
   const document = {
-    body, title: 'New Log',
-    getElementById: id => id === 'logtype' ? logType : elements.get(id) ?? null,
+    body, documentElement: {}, title: 'New Log',
+    getElementById: id => id === 'logtype' ? logType :
+      id === 'school_picker_teacherSchoolPicker_toggle_btn' && authenticated
+        ? schoolPicker : elements.get(id) ?? null,
     querySelector: selector => selector === 'select[name="subtype"]'
       ? subtype : selector === 'textarea[name="UF-008009-1"]' ? noteBox : null,
     querySelectorAll: () => [],
@@ -51,8 +60,15 @@ function fixture({ kind = 'SCC', stored = {}, original = 'PowerSchool header', s
   const encoded = Buffer.from(JSON.stringify({
     v: 1, studentNumber: '12345678', note: NOTE, settings, outcome
   })).toString('base64url');
+  const locationHash = typeof hash === 'string'
+    ? hash : '#' + kind.toLowerCase() + '=' + encoded;
+  class FakeObserver {
+    constructor(callback) { this.callback = callback; signInObserver = this; }
+    observe() {}
+    disconnect() {}
+  }
   const context = vm.createContext({
-    document, location: { pathname: '/teachers/log.html', search: '', hash: '#' + kind.toLowerCase() + '=' + encoded },
+    document, location: { pathname, search: '', hash: locationHash },
     history: { replaceState() {} },
     sessionStorage: {
       getItem: key => session.get(key) ?? null,
@@ -64,12 +80,17 @@ function fixture({ kind = 'SCC', stored = {}, original = 'PowerSchool header', s
       set: async values => Object.assign(storage, values)
     } } },
     Event: class { constructor(type) { this.type = type; } },
+    MutationObserver: FakeObserver,
     TextDecoder, Uint8Array, atob, setInterval, clearInterval, setTimeout,
     console: { log() {}, error() {} }
   });
   vm.runInContext(source, context);
   return {
     logType, subtype, noteBox, storage, session,
+    completeSignIn() {
+      authenticated = true;
+      signInObserver?.callback([]);
+    },
     get button() { return elements.get('ps-ecc-status-button'); },
     get submits() { return submits; }
   };
@@ -93,6 +114,36 @@ test('saved SCC selections prepare the parent call and preserve template text', 
   assert.equal(env.noteBox.value, 'PowerSchool header\n\n' + NOTE);
   assert.equal(env.submits, 0);
   assert.equal(env.session.has('ps_ecc_workflow_payload_v1'), false);
+});
+
+test('handoff survives the public sign-in page and resumes after login', async () => {
+  const login = fixture({ pathname: '/public/home.html' });
+  const pending = login.session.get('ps_ecc_workflow_payload_v1');
+  assert.ok(pending);
+  assert.match(login.button.textContent, /handoff saved.*sign in/i);
+
+  const resumed = fixture({
+    hash: '',
+    sessionStored: { ps_ecc_workflow_payload_v1: pending },
+    stored: {
+      sccLogTypeValue: 'SCC_TYPE',
+      sccLogSubtypeValue: 'SCC_PARENT'
+    }
+  });
+  await waitFor(() => resumed.button?.textContent === 'SCC ready — review & Submit');
+  assert.equal(resumed.noteBox.value, 'PowerSchool header\n\n' + NOTE);
+  assert.equal(resumed.session.has('ps_ecc_workflow_payload_v1'), false);
+});
+
+test('teacher login page keeps the handoff pending until sign-in completes', async () => {
+  const env = fixture({ pathname: '/teachers/home.html' });
+  assert.ok(env.session.get('ps_ecc_workflow_payload_v1'));
+  assert.match(env.button.textContent, /sign in.*continue automatically/i);
+  assert.equal(env.submits, 0);
+
+  env.completeSignIn();
+  await waitFor(() => env.submits === 1);
+  assert.ok(env.session.get('ps_ecc_workflow_payload_v1'));
 });
 
 test('first SCC handoff waits for teacher selections and remembers them', async () => {
