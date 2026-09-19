@@ -38,6 +38,7 @@ class FakeText {
 
 function run({ approved = [], pathname = '/spreadsheets/d/NEW-ROSTER/edit', reply = { ok: true } } = {}) {
   const body = new FakeElement();
+  let now = 1000;
   let observer = null;
   const messages = [];
   const document = {
@@ -72,15 +73,20 @@ function run({ approved = [], pathname = '/spreadsheets/d/NEW-ROSTER/edit', repl
     constructor(callback) { this.callback = callback; observer = this; }
     observe() {}
   }
+  class FakeDate extends Date {
+    static now() { return now; }
+  }
   const context = vm.createContext({
     document, chrome, location: { pathname },
     MutationObserver: FakeObserver, HTMLElement: FakeElement,
     Node: NODE, NodeFilter: { SHOW_TEXT: 4 },
+    Date: FakeDate,
     console: { error() {} }
   });
   vm.runInContext(source, context);
   return {
     body, messages,
+    advance(ms) { now += ms; },
     get observer() { return observer; },
     get status() { return document.getElementById('ecc-helper-status')?.textContent; }
   };
@@ -91,6 +97,20 @@ test('unapproved sheet has no watcher and does not inspect a handoff', () => {
   assert.equal(env.observer, null);
   assert.equal(env.status, undefined);
   assert.equal(env.messages.length, 0);
+});
+
+test('an identical handoff can be retried after the duplicate-toast window', () => {
+  const env = run({ approved: ['NEW-ROSTER'] });
+  const firstToast = new FakeElement();
+  firstToast.appendChild(new FakeText('ECC_HANDOFF_V1:abc_123'));
+  env.observer.callback([{ type: 'childList', addedNodes: [firstToast] }]);
+  assert.equal(env.messages.length, 1);
+
+  env.advance(2000);
+  const retryToast = new FakeElement();
+  retryToast.appendChild(new FakeText('ECC_HANDOFF_V1:abc_123'));
+  env.observer.callback([{ type: 'childList', addedNodes: [retryToast] }]);
+  assert.equal(env.messages.length, 2);
 });
 
 test('approved sheet opens a split toast once without covering controls', () => {
