@@ -151,3 +151,18 @@ test('approved sheet opens the Student Connection Call handoff only once', () =>
   env.observer.callback([{ type: 'childList', addedNodes: [toast] }]);
   assert.equal(env.messages.length, 1);
 });
+
+test('approved sheet opens a demographics handoff only once', () => {
+  const env = run({ approved: ['NEW-ROSTER'] });
+  const toast = new FakeElement();
+  toast.appendChild(new FakeText('DEMOGRAPHICS_HANDOFF_V1:'));
+  toast.appendChild(new FakeText('student_123'));
+  env.observer.callback([{ type: 'childList', addedNodes: [toast] }]);
+  assert.equal(env.messages.length, 1);
+  assert.equal(env.messages[0].type, 'OPEN_POWERSCHOOL_DEMOGRAPHICS');
+  assert.equal(env.messages[0].url,
+    'https://californiak12.powerschool.com/teachers/home.html#demographics=student_123');
+  assert.equal(env.status, undefined);
+  env.observer.callback([{ type: 'childList', addedNodes: [toast] }]);
+  assert.equal(env.messages.length, 1);
+});

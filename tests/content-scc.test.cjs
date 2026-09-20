@@ -12,11 +12,13 @@ const NOTE = 'On 9/18/2026, spoke with parent.';
 function fixture({
   kind = 'SCC', stored = {}, sessionStored = {},
   original = 'PowerSchool header', settings, outcome,
-  pathname = '/teachers/log.html', hash
+  pathname = '/teachers/log.html', hash,
+  pageOptions = [], pageValue = ''
 } = {}) {
   const elements = new Map();
   const session = new Map(Object.entries(sessionStored));
   const storage = { ...stored };
+  const assignments = [];
   const body = { appendChild(el) { if (el.id) elements.set(el.id, el); } };
   let submits = 0;
   let authenticated = false;
@@ -44,6 +46,8 @@ function fixture({
   }
   const logType = makeSelect([['', 'Choose Type'], ['1187', 'Student Contact'], ['SCC_TYPE', 'Student Connection Call']]);
   const subtype = makeSelect([['', 'Choose Subtype'], ['GE:ECC', 'ECC'], ['SCC_PARENT', 'Parent Connection Call']]);
+  const pagePicker = makeSelect(pageOptions);
+  pagePicker.value = pageValue;
   const noteBox = makeElement();
   noteBox.value = original;
   const schoolPicker = { textContent: 'CAVA-SO' };
@@ -53,7 +57,8 @@ function fixture({
       id === 'school_picker_teacherSchoolPicker_toggle_btn' && authenticated
         ? schoolPicker : elements.get(id) ?? null,
     querySelector: selector => selector === 'select[name="subtype"]'
-      ? subtype : selector === 'textarea[name="UF-008009-1"]' ? noteBox : null,
+      ? subtype : selector === 'textarea[name="UF-008009-1"]' ? noteBox
+        : selector === 'select[name="page"]' ? pagePicker : null,
     querySelectorAll: () => [],
     createElement: () => makeElement()
   };
@@ -68,7 +73,10 @@ function fixture({
     disconnect() {}
   }
   const context = vm.createContext({
-    document, location: { pathname, search: '', hash: locationHash },
+    document, location: {
+      pathname, search: '', hash: locationHash,
+      assign: url => assignments.push(url)
+    },
     history: { replaceState() {} },
     sessionStorage: {
       getItem: key => session.get(key) ?? null,
@@ -86,7 +94,7 @@ function fixture({
   });
   vm.runInContext(source, context);
   return {
-    logType, subtype, noteBox, storage, session,
+    logType, subtype, noteBox, storage, session, assignments,
     completeSignIn() {
       authenticated = true;
       signInObserver?.callback([]);
@@ -206,5 +214,39 @@ test('unavailable configured choice leaves ECC note untouched', async () => {
   });
   await waitFor(() => env.button?.textContent === 'ECC automation stopped');
   assert.equal(env.noteBox.value, 'Contact: Note');
+  assert.equal(env.submits, 0);
+});
+
+test('demographics handoff opens the Demographics option from a student screen', async () => {
+  const env = fixture({
+    kind: 'DEMOGRAPHICS',
+    pathname: '/teachers/studentpages/contacts.html',
+    pageOptions: [
+      ['/teachers/studentpages/contacts.html?frn=123', 'Contacts'],
+      ['/teachers/studentpages/demographics.html?frn=123', 'Demographics']
+    ],
+    pageValue: '/teachers/studentpages/contacts.html?frn=123'
+  });
+  await waitFor(() => env.assignments.length === 1);
+  assert.equal(env.assignments[0],
+    '/teachers/studentpages/demographics.html?frn=123');
+  assert.ok(env.session.has('ps_ecc_workflow_payload_v1'));
+  assert.equal(env.submits, 0);
+});
+
+test('demographics handoff finishes without opening or editing a log', async () => {
+  const demographicsUrl = '/teachers/studentpages/demographics.html?frn=123';
+  const env = fixture({
+    kind: 'DEMOGRAPHICS',
+    pathname: '/teachers/studentpages/demographics.html',
+    pageOptions: [[demographicsUrl, 'Demographics']],
+    pageValue: demographicsUrl
+  });
+  await waitFor(() =>
+    env.button?.textContent === 'Demographics open — review student information'
+  );
+  assert.equal(env.assignments.length, 0);
+  assert.equal(env.session.has('ps_ecc_workflow_payload_v1'), false);
+  assert.equal(env.noteBox.value, 'PowerSchool header');
   assert.equal(env.submits, 0);
 });

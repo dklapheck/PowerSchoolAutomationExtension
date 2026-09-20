@@ -2,8 +2,24 @@
   'use strict';
 
   const HANDOFFS = [
-    { prefix: 'ECC_HANDOFF_V1:', kind: 'ECC', hash: 'ecc=' },
-    { prefix: 'SCC_HANDOFF_V1:', kind: 'SCC', hash: 'scc=' }
+    {
+      prefix: 'ECC_HANDOFF_V1:',
+      kind: 'ECC',
+      messageType: 'OPEN_POWERSCHOOL_ECC',
+      hash: 'ecc='
+    },
+    {
+      prefix: 'SCC_HANDOFF_V1:',
+      kind: 'SCC',
+      messageType: 'OPEN_POWERSCHOOL_SCC',
+      hash: 'scc='
+    },
+    {
+      prefix: 'DEMOGRAPHICS_HANDOFF_V1:',
+      kind: 'Demographics',
+      messageType: 'OPEN_POWERSCHOOL_DEMOGRAPHICS',
+      hash: 'demographics='
+    }
   ];
   // The previously supported sheet remains approved by default.
   const LEGACY_ROSTER_ID = '1wJwz78LkACmNGxrrU6w6zOXy2zBZFeFElWg5PiCbm6g';
@@ -88,7 +104,7 @@
     lastHandoffAt = now;
     replaceVisibleMarker(node);
     chrome.runtime.sendMessage({
-      type: 'OPEN_POWERSCHOOL_' + handoff.kind,
+      type: handoff.messageType,
       url: POWERSCHOOL_BASE + handoff.hash + handoff.encoded
     }, response => {
       if (chrome.runtime.lastError || !response?.ok) {

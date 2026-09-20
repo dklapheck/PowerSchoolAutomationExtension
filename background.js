@@ -3,13 +3,18 @@
 // Opens the PowerSchool handoff in a new tab.
 // chrome.tabs.create does not require the broad "tabs" permission.
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (!message || !['OPEN_POWERSCHOOL_ECC', 'OPEN_POWERSCHOOL_SCC'].includes(message.type)) {
+  const handoffHashes = {
+    OPEN_POWERSCHOOL_ECC: 'ecc=',
+    OPEN_POWERSCHOOL_SCC: 'scc=',
+    OPEN_POWERSCHOOL_DEMOGRAPHICS: 'demographics='
+  };
+  if (!message || !handoffHashes[message.type]) {
     return;
   }
 
   const url = String(message.url || '');
   const allowedPrefix = 'https://californiak12.powerschool.com/teachers/home.html#' +
-    (message.type === 'OPEN_POWERSCHOOL_SCC' ? 'scc=' : 'ecc=');
+    handoffHashes[message.type];
 
   if (!url.startsWith(allowedPrefix) || !/^[A-Za-z0-9_-]+$/.test(url.slice(allowedPrefix.length))) {
     sendResponse({ ok: false, error: 'Rejected unexpected URL.' });

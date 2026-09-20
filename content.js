@@ -437,13 +437,17 @@
     return new TextDecoder().decode(bytes);
   }
 
-  function importECCPayloadFromHash() {
+  function importPowerSchoolPayloadFromHash() {
     const hash = location.hash || '';
-    const kind = hash.startsWith('#scc=') ? 'SCC' : 'ECC';
-    const marker = kind === 'SCC' ? '#scc=' : '#ecc=';
-    if (!hash.startsWith(marker)) return null;
+    const handoff = [
+      { marker: '#demographics=', kind: 'DEMOGRAPHICS' },
+      { marker: '#scc=', kind: 'SCC' },
+      { marker: '#ecc=', kind: 'ECC' }
+    ].find(candidate => hash.startsWith(candidate.marker));
+    if (!handoff) return null;
 
-    const encoded = hash.slice(marker.length);
+    const kind = handoff.kind;
+    const encoded = hash.slice(handoff.marker.length);
 
     // Remove the student/note payload from the visible URL immediately.
     history.replaceState(
@@ -475,7 +479,7 @@
         );
       }
 
-      if (!note) {
+      if (kind !== 'DEMOGRAPHICS' && !note) {
         throw new Error(
           'The ' + kind + ' note is empty.'
         );
@@ -499,15 +503,17 @@
         startedAt: Date.now()
       };
 
-      // Keep only non-student form context for the temporary settings capture.
-      // The note and student number remain in the short-lived workflow state.
-      sessionStorage.setItem('ps_form_capture_context_v1', JSON.stringify({
-        kind,
-        date: kind === 'ECC' ? date : '',
-        outcome: kind === 'SCC' ? state.outcome :
-          (state.outcome === 'ECC Attempt' || /\[Attempt\]/.test(note))
-            ? 'Attempt' : 'Conversation'
-      }));
+      if (kind !== 'DEMOGRAPHICS') {
+        // Keep only non-student form context for the temporary settings capture.
+        // The note and student number remain in the short-lived workflow state.
+        sessionStorage.setItem('ps_form_capture_context_v1', JSON.stringify({
+          kind,
+          date: kind === 'ECC' ? date : '',
+          outcome: kind === 'SCC' ? state.outcome :
+            (state.outcome === 'ECC Attempt' || /\[Attempt\]/.test(note))
+              ? 'Attempt' : 'Conversation'
+        }));
+      }
 
       sessionStorage.setItem(
         ECC_STORAGE_KEY,
@@ -553,6 +559,10 @@
 
   function clearECCState() {
     sessionStorage.removeItem(ECC_STORAGE_KEY);
+  }
+
+  function getWorkflowLabel(kind) {
+    return kind === 'DEMOGRAPHICS' ? 'Demographics' : kind;
   }
 
   // ============================================================
@@ -616,7 +626,7 @@
   }
 
   function failECC(message) {
-    const kind = loadECCState()?.kind === 'SCC' ? 'SCC' : 'ECC';
+    const kind = getWorkflowLabel(loadECCState()?.kind || 'ECC');
     console.error('[PowerSchool ' + kind + ']', message);
 
     clearECCState();
@@ -753,6 +763,28 @@
     );
 
     return logOption?.value || null;
+  }
+
+  function getDemographicsScreen() {
+    const screenPicker = document.querySelector(
+      'select[name="page"]'
+    );
+    if (!screenPicker) return null;
+
+    const option = [
+      ...screenPicker.options
+    ].find(candidate =>
+      normalize(candidate.textContent).toLowerCase() === 'demographics'
+    );
+    if (!option) return null;
+
+    const selected = screenPicker.selectedOptions?.[0] ||
+      screenPicker.options[screenPicker.selectedIndex];
+    return {
+      isCurrent: selected === option ||
+        normalize(selected?.textContent).toLowerCase() === 'demographics',
+      url: option.value || ''
+    };
   }
 
   // ============================================================
@@ -1054,7 +1086,10 @@
       return;
     }
 
-    const kind = state.kind === 'SCC' ? 'SCC' : 'ECC';
+    const kind = state.kind === 'DEMOGRAPHICS'
+      ? 'DEMOGRAPHICS'
+      : state.kind === 'SCC' ? 'SCC' : 'ECC';
+    const workflowLabel = getWorkflowLabel(kind);
     const path = location.pathname.toLowerCase();
     const isWorkflowPage =
       path.endsWith('/teachers/log.html') ||
@@ -1066,7 +1101,7 @@
     // 10-second page timeout. Wait for the authenticated teacher shell, while
     // sessionStorage carries the handoff through same-tab navigation.
     if (!isWorkflowPage && !getSchoolPicker()) {
-      pauseForPowerSchoolSignIn(kind);
+      pauseForPowerSchoolSignIn(workflowLabel);
       return;
     }
 
@@ -1089,6 +1124,9 @@
       // 1. CREATE NEW LOG FORM
       // --------------------------------------------------------
       if (path.endsWith('/teachers/log.html')) {
+        if (kind === 'DEMOGRAPHICS') {
+          throw new Error('PowerSchool opened a log form instead of student Demographics.');
+        }
         setECCButton(
           `${kind} · ${state.studentNumber} · preparing log`
         );
@@ -1101,6 +1139,7 @@
       // 2. LOG ENTRIES SUMMARY -> NEW
       // --------------------------------------------------------
       if (
+        kind !== 'DEMOGRAPHICS' &&
         path.includes(
           '/teachers/studentpages/stride_log_summary.html'
         )
@@ -1133,6 +1172,29 @@
       // Contacts, Demographics, etc.
       // --------------------------------------------------------
       if (path.includes('/teachers/studentpages/')) {
+        if (kind === 'DEMOGRAPHICS') {
+          setECCButton(
+            `Demographics · ${state.studentNumber} · opening screen`
+          );
+
+          const demographics = await waitFor(
+            () => getDemographicsScreen(),
+            10000,
+            100
+          );
+          if (demographics.isCurrent) {
+            clearECCState();
+            setECCButton('Demographics open — review student information', 'ready');
+            return;
+          }
+          if (!demographics.url) {
+            throw new Error('PowerSchool did not provide a Demographics screen URL.');
+          }
+
+          location.assign(demographics.url);
+          return;
+        }
+
         setECCButton(
           `${kind} · ${state.studentNumber} · finding Log Entries`
         );
@@ -1180,6 +1242,14 @@
           throw new Error(
             'The correct student was found, but PowerSchool did not expose a student-information link.'
           );
+        }
+
+        if (kind === 'DEMOGRAPHICS') {
+          setECCButton(
+            `Demographics · ${state.studentNumber} · opening student`
+          );
+          location.assign(studentLink.href);
+          return;
         }
 
         const directLogUrl = getStudentLogSummaryUrl(studentLink);
@@ -1267,7 +1337,7 @@
     }
   }
 
-  importECCPayloadFromHash();
+  importPowerSchoolPayloadFromHash();
 
   // PowerSchool may redirect an unauthenticated teacher request to /public/.
   // Capture the hash there before the login form removes it. The same tab's
@@ -1275,7 +1345,7 @@
   if (!isTeacherPage) {
     const pending = loadECCState();
     if (pending) {
-      const kind = pending.kind === 'SCC' ? 'SCC' : 'ECC';
+      const kind = getWorkflowLabel(pending.kind || 'ECC');
       setECCButton(
         kind + ' handoff saved — sign in to continue'
       );
