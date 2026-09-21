@@ -34,6 +34,12 @@
   const ELEMENT_NODE = 1;
   const TEXT_NODE = 3;
   const SHOW_TEXT = 4;
+  const TOAST_SELECTORS = [
+    '.docs-toast-msg',
+    '[role="alert"]',
+    '[aria-live="assertive"]',
+    '[aria-live="polite"]'
+  ];
   let lastHandoffKey = '';
   let lastHandoffAt = 0;
 
@@ -162,6 +168,19 @@
       characterData: true
     });
     scanNode(document.body);
+
+    // Google Sheets sometimes renders its toast inside an existing live
+    // region or editor frame, which produces no useful added-node mutation
+    // in the top page. Poll only the small known toast/live regions as a
+    // fallback; background.js deduplicates messages reported by two frames.
+    const scanToastRegions = () => {
+      if (typeof document.querySelectorAll !== 'function') return;
+      for (const selector of TOAST_SELECTORS) {
+        for (const node of document.querySelectorAll(selector)) scanNode(node);
+      }
+    };
+    scanToastRegions();
+    if (typeof setInterval === 'function') setInterval(scanToastRegions, 250);
   }
 
   const match = location.pathname.match(
