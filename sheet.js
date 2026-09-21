@@ -185,10 +185,28 @@
     if (typeof setInterval === 'function') setInterval(scanToastRegions, 250);
   }
 
-  const match = location.pathname.match(
-    /^\/spreadsheets\/(?:u\/\d+\/)?d\/([A-Za-z0-9_-]+)(?:\/|$)/
-  );
-  if (!match) return;
+  function extractSpreadsheetId(value) {
+    const match = String(value || '').match(
+      /\/spreadsheets\/(?:u\/\d+\/)?d\/([A-Za-z0-9_-]+)(?:\/|$)/
+    );
+    return match ? match[1] : '';
+  }
+
+  function getSpreadsheetId() {
+    const candidates = [location.href, location.pathname, document.referrer];
+    // Chrome commonly places the Sheets toast in an inherited about:blank
+    // editor frame. That frame has no spreadsheet path of its own.
+    try { candidates.push(top.location.href); } catch (_) {}
+    try { candidates.push(parent.location.href); } catch (_) {}
+    for (const candidate of candidates) {
+      const id = extractSpreadsheetId(candidate);
+      if (id) return id;
+    }
+    return '';
+  }
+
+  const spreadsheetId = getSpreadsheetId();
+  if (!spreadsheetId) return;
   chrome.storage.local.get({ eccApprovedSpreadsheetIds: [] }, settings => {
     if (chrome.runtime.lastError) {
       console.error('[ECC Helper] Could not read approved sheets.',
@@ -197,7 +215,7 @@
     }
     const approved = Array.isArray(settings.eccApprovedSpreadsheetIds)
       ? settings.eccApprovedSpreadsheetIds : [];
-    if (DEFAULT_APPROVED_ROSTER_IDS.has(match[1]) || approved.includes(match[1])) {
+    if (DEFAULT_APPROVED_ROSTER_IDS.has(spreadsheetId) || approved.includes(spreadsheetId)) {
       startWatching();
     }
   });
