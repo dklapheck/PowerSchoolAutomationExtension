@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "PowerSchool Helper",
-  "version": "3.4.1",
+  "version": "3.4.2",
   "description": "Adds the OR010 shortcut, prepares ECC/SCC logs, and opens student demographics from approved Google Sheets.",
   "background": {
     "service_worker": "background.js"
