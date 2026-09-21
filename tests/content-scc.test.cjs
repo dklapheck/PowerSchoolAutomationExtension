@@ -13,7 +13,7 @@ function fixture({
   kind = 'SCC', stored = {}, sessionStored = {},
   original = 'PowerSchool header', settings, outcome,
   pathname = '/teachers/log.html', hash,
-  pageOptions = [], pageValue = ''
+  pageOptions = [], pageValue = '', date = '9/18/2026'
 } = {}) {
   const elements = new Map();
   const session = new Map(Object.entries(sessionStored));
@@ -48,22 +48,33 @@ function fixture({
   const subtype = makeSelect([['', 'Choose Subtype'], ['GE:ECC', 'ECC'], ['SCC_PARENT', 'Parent Connection Call']]);
   const pagePicker = makeSelect(pageOptions);
   pagePicker.value = pageValue;
+  const tagSelect = makeSelect([['', 'Choose Tag'], ['attempt_1', 'Attempt 1']]);
+  tagSelect.name = 'tag';
+  const dateInput = makeElement();
+  dateInput.id = 'entryLogDate';
+  dateInput.name = 'UF-008005-1';
+  dateInput.type = 'text';
+  dateInput.value = '';
   const noteBox = makeElement();
   noteBox.value = original;
   const schoolPicker = { textContent: 'CAVA-SO' };
   const document = {
     body, documentElement: {}, title: 'New Log',
     getElementById: id => id === 'logtype' ? logType :
+      id === 'entryLogDate' ? dateInput :
       id === 'school_picker_teacherSchoolPicker_toggle_btn' && authenticated
         ? schoolPicker : elements.get(id) ?? null,
     querySelector: selector => selector === 'select[name="subtype"]'
       ? subtype : selector === 'textarea[name="UF-008009-1"]' ? noteBox
         : selector === 'select[name="page"]' ? pagePicker : null,
-    querySelectorAll: () => [],
+    querySelectorAll: selector => selector === 'input, select'
+      ? [logType, subtype, pagePicker, tagSelect, dateInput]
+      : selector === 'select' ? [logType, subtype, pagePicker, tagSelect]
+        : [],
     createElement: () => makeElement()
   };
   const encoded = Buffer.from(JSON.stringify({
-    v: 1, studentNumber: '12345678', note: NOTE, settings, outcome
+    v: 1, studentNumber: '12345678', date, note: NOTE, settings, outcome
   })).toString('base64url');
   const locationHash = typeof hash === 'string'
     ? hash : '#' + kind.toLowerCase() + '=' + encoded;
@@ -94,7 +105,7 @@ function fixture({
   });
   vm.runInContext(source, context);
   return {
-    logType, subtype, noteBox, storage, session, assignments,
+    logType, subtype, noteBox, dateInput, tagSelect, storage, session, assignments,
     completeSignIn() {
       authenticated = true;
       signInObserver?.callback([]);
@@ -190,11 +201,16 @@ test('Settings handoff overrides remembered SCC choices', async () => {
   const env = fixture({
     stored: { sccLogTypeValue: '1187', sccLogSubtypeValue: 'GE:ECC' },
     outcome: 'SCC Success',
-    settings: { typeValue: 'SCC_TYPE', subtypeValue: 'SCC_PARENT', extraDropdowns: [] }
+    settings: {
+      typeValue: 'SCC_TYPE', subtypeValue: 'SCC_PARENT', extraDropdowns: [],
+      dateField: 'entryLogDate', tagLabel: 'Attempt 1'
+    }
   });
   await waitFor(() => env.button?.textContent === 'SCC ready — review & Submit');
   assert.equal(env.logType.value, 'SCC_TYPE');
   assert.equal(env.subtype.value, 'SCC_PARENT');
+  assert.equal(env.dateInput.value, '9/18/2026');
+  assert.equal(env.tagSelect.value, 'attempt_1');
   assert.equal(env.submits, 0);
 });
 
