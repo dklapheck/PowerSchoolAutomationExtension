@@ -146,16 +146,23 @@ test('toast polling fallback detects SCC and ECC live regions', () => {
     'OPEN_POWERSCHOOL_SCC',
     'OPEN_POWERSCHOOL_ECC'
   ]);
+
+  // The same visible toasts are polled every 250 ms for ten seconds.
+  for (let i = 0; i < 40; i += 1) {
+    env.advance(250);
+    env.poll();
+  }
+  assert.equal(env.messages.length, 2);
 });
 
-test('an identical handoff can be retried after the duplicate-toast window', () => {
+test('an identical handoff can be retried after the visible-toast window', () => {
   const env = run({ approved: ['NEW-ROSTER'] });
   const firstToast = new FakeElement();
   firstToast.appendChild(new FakeText('ECC_HANDOFF_V1:abc_123'));
   env.observer.callback([{ type: 'childList', addedNodes: [firstToast] }]);
   assert.equal(env.messages.length, 1);
 
-  env.advance(2000);
+  env.advance(16000);
   const retryToast = new FakeElement();
   retryToast.appendChild(new FakeText('ECC_HANDOFF_V1:abc_123'));
   env.observer.callback([{ type: 'childList', addedNodes: [retryToast] }]);
