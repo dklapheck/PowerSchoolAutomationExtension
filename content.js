@@ -491,13 +491,19 @@
         date,
         note,
         outcome: String(payload.outcome || '').trim(),
+        attemptNumber: Number(payload.attemptNumber || 0) || null,
         settings: payload.settings && typeof payload.settings === 'object'
           ? {
               typeValue: String(payload.settings.typeValue || '').trim(),
               subtypeValue: String(payload.settings.subtypeValue || '').trim(),
               extraDropdowns: Array.isArray(payload.settings.extraDropdowns)
                 ? payload.settings.extraDropdowns : [],
+              dateFields: Array.isArray(payload.settings.dateFields)
+                ? payload.settings.dateFields.map(value => String(value || '').trim()).filter(Boolean)
+                : [],
               dateField: String(payload.settings.dateField || '').trim(),
+              tagMap: payload.settings.tagMap && typeof payload.settings.tagMap === 'object' &&
+                !Array.isArray(payload.settings.tagMap) ? payload.settings.tagMap : {},
               tagLabel: String(payload.settings.tagLabel || '').trim()
             }
           : null,
@@ -1047,12 +1053,26 @@
       selectExtraDropdowns(logType, settings.extraDropdowns);
     }
 
-    if (settings?.dateField && state.date) {
-      setConfiguredLogDate(logType, settings.dateField, state.date);
+    const dateFields = settings?.dateFields?.length
+      ? settings.dateFields
+      : settings?.dateField ? [settings.dateField] : [];
+    if (dateFields.length && !state.date) {
+      throw new Error('The handoff did not include a date for the configured PowerSchool date fields.');
+    }
+    for (const dateField of [...new Set(dateFields)]) {
+      setConfiguredLogDate(logType, dateField, state.date);
     }
 
-    if (settings?.tagLabel) {
-      await selectConfiguredTag(logType, settings.tagLabel);
+    const mappedTag = state.attemptNumber
+      ? String(settings?.tagMap?.[String(state.attemptNumber)] || '').trim()
+      : '';
+    if (state.outcome === 'SCC Attempt' && settings?.tagMap &&
+        Object.keys(settings.tagMap).length && !mappedTag) {
+      throw new Error('No PowerSchool tag is configured for Attempt ' + state.attemptNumber + '.');
+    }
+    const tagLabel = mappedTag || settings?.tagLabel || '';
+    if (tagLabel) {
+      await selectConfiguredTag(logType, tagLabel);
     }
 
     if (logType.value !== selections.typeValue || subtype.value !== selections.subtypeValue) {
