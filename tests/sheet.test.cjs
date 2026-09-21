@@ -99,6 +99,22 @@ test('unapproved sheet has no watcher and does not inspect a handoff', () => {
   assert.equal(env.messages.length, 0);
 });
 
+test('6RosterORNFinal is watched without a stored approval', () => {
+  const env = run({
+    pathname: '/spreadsheets/d/1_MpkySxTB6BYBB8In3ELRUsH2XpGjaeipMXxxGQb0To/edit'
+  });
+  assert.ok(env.observer);
+
+  const toast = new FakeElement();
+  toast.appendChild(new FakeText('SCC_HANDOFF_V1:attempt_123'));
+  env.observer.callback([{ type: 'childList', addedNodes: [toast] }]);
+
+  assert.equal(env.messages.length, 1);
+  assert.equal(env.messages[0].type, 'OPEN_POWERSCHOOL_SCC');
+  assert.equal(env.messages[0].url,
+    'https://californiak12.powerschool.com/teachers/home.html#scc=attempt_123');
+});
+
 test('an identical handoff can be retried after the duplicate-toast window', () => {
   const env = run({ approved: ['NEW-ROSTER'] });
   const firstToast = new FakeElement();
