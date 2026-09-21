@@ -935,6 +935,17 @@
     return normalize(control.getAttribute?.('aria-label'));
   }
 
+  function tagLabelMatches(visibleText, configuredLabel) {
+    const visible = normalize(visibleText);
+    const configured = normalize(configuredLabel);
+    if (visible === configured) return true;
+
+    const attempt = /^Attempt\s+([1-6])$/i.exec(configured);
+    if (!attempt) return false;
+    const visibleAttempt = /^Attempt\s+([1-6])(?:\s*\([^)]+\))?$/i.exec(visible);
+    return !!visibleAttempt && visibleAttempt[1] === attempt[1];
+  }
+
   async function selectConfiguredTag(logType, configuredLabel) {
     const label = normalize(configuredLabel);
     if (!label) return;
@@ -943,7 +954,7 @@
 
     for (const select of scope.querySelectorAll('select')) {
       for (const option of select.options || []) {
-        if (normalize(option.textContent) === label) {
+        if (tagLabelMatches(option.textContent, label)) {
           matches.push({
             choose() { select.value = option.value; fireEvents(select); },
             selected() { return select.value === option.value; }
@@ -953,7 +964,7 @@
     }
 
     for (const control of scope.querySelectorAll('input[type="checkbox"], input[type="radio"]')) {
-      if (labelForControl(control, scope) === label) {
+      if (tagLabelMatches(labelForControl(control, scope), label)) {
         matches.push({
           choose() { if (!control.checked) control.click(); },
           selected() { return !!control.checked; }
@@ -962,7 +973,7 @@
     }
 
     for (const option of scope.querySelectorAll('[role="option"], [role="menuitemcheckbox"]')) {
-      if (normalize(option.textContent) === label) {
+      if (tagLabelMatches(option.textContent, label)) {
         matches.push({
           choose() { option.click(); },
           selected() {
