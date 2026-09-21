@@ -21,8 +21,12 @@
       hash: 'demographics='
     }
   ];
-  // The previously supported sheet remains approved by default.
-  const LEGACY_ROSTER_ID = '1wJwz78LkACmNGxrrU6w6zOXy2zBZFeFElWg5PiCbm6g';
+  // Trusted roster workbooks remain approved by default. Teachers may add
+  // other roster IDs through the extension options page.
+  const DEFAULT_APPROVED_ROSTER_IDS = new Set([
+    '1wJwz78LkACmNGxrrU6w6zOXy2zBZFeFElWg5PiCbm6g',
+    '1_MpkySxTB6BYBB8In3ELRUsH2XpGjaeipMXxxGQb0To'
+  ]);
   const POWERSCHOOL_BASE =
     'https://californiak12.powerschool.com/teachers/home.html#';
   const STATUS_ID = 'ecc-helper-status';
@@ -167,7 +171,7 @@
     }
     const approved = Array.isArray(settings.eccApprovedSpreadsheetIds)
       ? settings.eccApprovedSpreadsheetIds : [];
-    if (match[1] === LEGACY_ROSTER_ID || approved.includes(match[1])) {
+    if (DEFAULT_APPROVED_ROSTER_IDS.has(match[1]) || approved.includes(match[1])) {
       startWatching();
     }
   });
