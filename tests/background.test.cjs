@@ -48,7 +48,7 @@ test('duplicate frame reports open one PowerSchool tab', async () => {
   assert.equal(duplicate.deduplicated, true);
   assert.equal(env.opened.length, 1);
 
-  env.advance(2100);
+  env.advance(15100);
   const retry = await env.send(message);
   assert.equal(retry.ok, true);
   assert.equal(retry.deduplicated, undefined);
