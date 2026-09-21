@@ -2,7 +2,7 @@
   'use strict';
 
   // ============================================================
-  // PowerSchool OR010 + ECC/SCC Helper v3
+  // PowerSchool Helper v3
   //
   // Security / behavior:
   // - Runs only on PowerSchool teacher pages.
@@ -496,7 +496,9 @@
               typeValue: String(payload.settings.typeValue || '').trim(),
               subtypeValue: String(payload.settings.subtypeValue || '').trim(),
               extraDropdowns: Array.isArray(payload.settings.extraDropdowns)
-                ? payload.settings.extraDropdowns : []
+                ? payload.settings.extraDropdowns : [],
+              dateField: String(payload.settings.dateField || '').trim(),
+              tagLabel: String(payload.settings.tagLabel || '').trim()
             }
           : null,
         stepCount: 0,
@@ -865,7 +867,7 @@
   }
 
   function selectExtraDropdowns(logType, extraDropdowns) {
-    const scope = logType.closest('form') || document;
+    const scope = logType.closest?.('form') || document;
     for (const entry of extraDropdowns) {
       const name = String(entry?.name || '');
       const value = String(entry?.value || '');
@@ -883,6 +885,103 @@
       target.value = value;
       fireEvents(target);
       if (target.value !== value) throw new Error('PowerSchool did not accept dropdown ' + name + '.');
+    }
+  }
+
+  function comparableDate(value) {
+    const text = String(value || '').trim();
+    let match = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(text);
+    if (match) {
+      return `${match[3]}-${match[1].padStart(2, '0')}-${match[2].padStart(2, '0')}`;
+    }
+    match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
+    return match ? `${match[1]}-${match[2]}-${match[3]}` : '';
+  }
+
+  function setConfiguredLogDate(logType, fieldName, requestedDate) {
+    const name = String(fieldName || '').trim();
+    const expected = comparableDate(requestedDate);
+    if (!/^[A-Za-z0-9_:-]{1,80}$/.test(name) || !expected) {
+      throw new Error('The configured PowerSchool log-date field or requested date is invalid.');
+    }
+
+    const scope = logType.closest?.('form') || document;
+    const matches = [...scope.querySelectorAll('input, select')].filter(control =>
+      control.id === name || control.name === name
+    );
+    if (matches.length !== 1) {
+      throw new Error('PowerSchool log-date field ' + name +
+        (matches.length ? ' is ambiguous.' : ' is unavailable.'));
+    }
+
+    const control = matches[0];
+    const value = String(control.type || '').toLowerCase() === 'date'
+      ? expected : String(requestedDate).trim();
+    control.value = value;
+    fireEvents(control);
+    if (comparableDate(control.value) !== expected) {
+      throw new Error('PowerSchool did not accept the requested log date.');
+    }
+  }
+
+  function labelForControl(control, scope) {
+    if (control.labels?.length) return normalize(control.labels[0].textContent);
+    if (control.id) {
+      const label = [...scope.querySelectorAll('label')].find(item =>
+        item.htmlFor === control.id || item.getAttribute?.('for') === control.id
+      );
+      if (label) return normalize(label.textContent);
+    }
+    return normalize(control.getAttribute?.('aria-label'));
+  }
+
+  async function selectConfiguredTag(logType, configuredLabel) {
+    const label = normalize(configuredLabel);
+    if (!label) return;
+    const scope = logType.closest?.('form') || document;
+    const matches = [];
+
+    for (const select of scope.querySelectorAll('select')) {
+      for (const option of select.options || []) {
+        if (normalize(option.textContent) === label) {
+          matches.push({
+            choose() { select.value = option.value; fireEvents(select); },
+            selected() { return select.value === option.value; }
+          });
+        }
+      }
+    }
+
+    for (const control of scope.querySelectorAll('input[type="checkbox"], input[type="radio"]')) {
+      if (labelForControl(control, scope) === label) {
+        matches.push({
+          choose() { if (!control.checked) control.click(); },
+          selected() { return !!control.checked; }
+        });
+      }
+    }
+
+    for (const option of scope.querySelectorAll('[role="option"], [role="menuitemcheckbox"]')) {
+      if (normalize(option.textContent) === label) {
+        matches.push({
+          choose() { option.click(); },
+          selected() {
+            const state = option.getAttribute?.('aria-selected') ??
+              option.getAttribute?.('aria-checked');
+            return state == null || state === 'true';
+          }
+        });
+      }
+    }
+
+    if (matches.length !== 1) {
+      throw new Error('PowerSchool tag "' + label + '" ' +
+        (matches.length ? 'is ambiguous.' : 'is unavailable.'));
+    }
+    matches[0].choose();
+    await wait(100);
+    if (!matches[0].selected()) {
+      throw new Error('PowerSchool did not accept tag "' + label + '".');
     }
   }
 
@@ -935,6 +1034,14 @@
     if (settings?.extraDropdowns?.length) {
       await wait(300);
       selectExtraDropdowns(logType, settings.extraDropdowns);
+    }
+
+    if (settings?.dateField && state.date) {
+      setConfiguredLogDate(logType, settings.dateField, state.date);
+    }
+
+    if (settings?.tagLabel) {
+      await selectConfiguredTag(logType, settings.tagLabel);
     }
 
     if (logType.value !== selections.typeValue || subtype.value !== selections.subtypeValue) {
