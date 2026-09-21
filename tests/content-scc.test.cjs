@@ -11,7 +11,7 @@ const NOTE = 'On 9/18/2026, spoke with parent.';
 
 function fixture({
   kind = 'SCC', stored = {}, sessionStored = {},
-  original = 'PowerSchool header', settings, outcome,
+  original = 'PowerSchool header', settings, outcome, attemptNumber,
   pathname = '/teachers/log.html', hash,
   pageOptions = [], pageValue = '', date = '9/18/2026'
 } = {}) {
@@ -48,13 +48,25 @@ function fixture({
   const subtype = makeSelect([['', 'Choose Subtype'], ['GE:ECC', 'ECC'], ['SCC_PARENT', 'Parent Connection Call']]);
   const pagePicker = makeSelect(pageOptions);
   pagePicker.value = pageValue;
-  const tagSelect = makeSelect([['', 'Choose Tag'], ['attempt_1', 'Attempt 1 (34)']]);
+  const tagSelect = makeSelect([
+    ['', 'Choose Tag'], ['attempt_1', 'Attempt 1 (34)'], ['attempt_2', 'Attempt 2 (35)']
+  ]);
   tagSelect.name = 'tag';
   const dateInput = makeElement();
   dateInput.id = 'entryLogDate';
   dateInput.name = 'UF-008005-1';
   dateInput.type = 'text';
   dateInput.value = '';
+  const incidentDate = makeElement();
+  incidentDate.id = '';
+  incidentDate.name = 'UF-008019-1';
+  incidentDate.type = 'text';
+  incidentDate.value = '';
+  const actionDate = makeElement();
+  actionDate.id = '';
+  actionDate.name = 'UF-008041-1';
+  actionDate.type = 'text';
+  actionDate.value = '';
   const noteBox = makeElement();
   noteBox.value = original;
   const schoolPicker = { textContent: 'CAVA-SO' };
@@ -68,13 +80,13 @@ function fixture({
       ? subtype : selector === 'textarea[name="UF-008009-1"]' ? noteBox
         : selector === 'select[name="page"]' ? pagePicker : null,
     querySelectorAll: selector => selector === 'input, select'
-      ? [logType, subtype, pagePicker, tagSelect, dateInput]
+      ? [logType, subtype, pagePicker, tagSelect, dateInput, incidentDate, actionDate]
       : selector === 'select' ? [logType, subtype, pagePicker, tagSelect]
         : [],
     createElement: () => makeElement()
   };
   const encoded = Buffer.from(JSON.stringify({
-    v: 1, studentNumber: '12345678', date, note: NOTE, settings, outcome
+    v: 1, studentNumber: '12345678', date, note: NOTE, settings, outcome, attemptNumber
   })).toString('base64url');
   const locationHash = typeof hash === 'string'
     ? hash : '#' + kind.toLowerCase() + '=' + encoded;
@@ -105,7 +117,8 @@ function fixture({
   });
   vm.runInContext(source, context);
   return {
-    logType, subtype, noteBox, dateInput, tagSelect, storage, session, assignments,
+    logType, subtype, noteBox, dateInput, incidentDate, actionDate,
+    tagSelect, storage, session, assignments,
     completeSignIn() {
       authenticated = true;
       signInObserver?.callback([]);
@@ -200,17 +213,21 @@ test('ECC still uses its own type, subtype, and Note placeholder', async () => {
 test('Settings handoff overrides remembered SCC choices', async () => {
   const env = fixture({
     stored: { sccLogTypeValue: '1187', sccLogSubtypeValue: 'GE:ECC' },
-    outcome: 'SCC Success',
+    outcome: 'SCC Attempt',
+    attemptNumber: 2,
     settings: {
       typeValue: 'SCC_TYPE', subtypeValue: 'SCC_PARENT', extraDropdowns: [],
-      dateField: 'entryLogDate', tagLabel: 'Attempt 1'
+      dateFields: ['entryLogDate', 'UF-008019-1', 'UF-008041-1'],
+      tagMap: { 2: 'Attempt 2 (35)' }, tagLabel: ''
     }
   });
   await waitFor(() => env.button?.textContent === 'SCC ready — review & Submit');
   assert.equal(env.logType.value, 'SCC_TYPE');
   assert.equal(env.subtype.value, 'SCC_PARENT');
   assert.equal(env.dateInput.value, '9/18/2026');
-  assert.equal(env.tagSelect.value, 'attempt_1');
+  assert.equal(env.incidentDate.value, '9/18/2026');
+  assert.equal(env.actionDate.value, '9/18/2026');
+  assert.equal(env.tagSelect.value, 'attempt_2');
   assert.equal(env.submits, 0);
 });
 
