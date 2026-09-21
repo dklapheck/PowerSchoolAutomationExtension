@@ -100,7 +100,8 @@
   function attemptTagMap(scope, host) {
     const tags = [];
     const seen = new Set();
-    const isAttempt = value => /^Attempt\s+[1-6]$/i.test(clean(value, 80));
+    const parseAttempt = value =>
+      /^Attempt\s+([1-6])(?:\s*\(([^)]+)\))?$/i.exec(clean(value, 80));
     const add = item => {
       const key = JSON.stringify(item);
       if (!seen.has(key)) {
@@ -113,9 +114,12 @@
       if (host.contains(select)) continue;
       for (const option of select.options || []) {
         const label = clean(option.textContent, 80);
-        if (!isAttempt(label)) continue;
+        const parsed = parseAttempt(label);
+        if (!parsed) continue;
         add({
           label,
+          canonicalLabel: 'Attempt ' + parsed[1],
+          code: clean(parsed[2], 80),
           value: clean(option.value, 120),
           controlId: clean(select.id, 80),
           controlName: clean(select.name, 80),
@@ -128,9 +132,12 @@
       if (host.contains(control)) continue;
       const label = clean(control.labels?.[0]?.textContent ||
         description(control, scope).label, 80);
-      if (!isAttempt(label)) continue;
+      const parsed = parseAttempt(label);
+      if (!parsed) continue;
       add({
         label,
+        canonicalLabel: 'Attempt ' + parsed[1],
+        code: clean(parsed[2], 80),
         value: clean(control.value, 120),
         controlId: clean(control.id, 80),
         controlName: clean(control.name, 80),
@@ -141,9 +148,12 @@
     for (const option of scope.querySelectorAll('[role="option"], [role="menuitemcheckbox"]')) {
       if (host.contains(option)) continue;
       const label = clean(option.textContent, 80);
-      if (!isAttempt(label)) continue;
+      const parsed = parseAttempt(label);
+      if (!parsed) continue;
       add({
         label,
+        canonicalLabel: 'Attempt ' + parsed[1],
+        code: clean(parsed[2], 80),
         value: clean(option.getAttribute('data-value'), 120),
         controlId: clean(option.id, 80),
         controlName: '',
@@ -350,7 +360,7 @@
       try {
         const tags = attemptTagMap(scope, host);
         if (!tags.length) {
-          throw new Error('No visible Attempt 1–6 tag options were found. Select the SCC Attempt Type/Subtype first.');
+          throw new Error('No Attempt 1–6 tag options were found. Select the SCC Attempt Type/Subtype first.');
         }
         const result = 'ATTEMPT_TAG_MAP_V1:' + JSON.stringify({
           schemaVersion: 1,
