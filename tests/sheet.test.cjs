@@ -78,8 +78,7 @@ function run({ approved = [], pathname = '/spreadsheets/d/NEW-ROSTER/edit', repl
   }
   const context = vm.createContext({
     document, chrome, location: { pathname },
-    MutationObserver: FakeObserver, HTMLElement: FakeElement,
-    Node: NODE, NodeFilter: { SHOW_TEXT: 4 },
+    MutationObserver: FakeObserver,
     Date: FakeDate,
     console: { error() {} }
   });
@@ -113,6 +112,17 @@ test('6RosterORNFinal is watched without a stored approval', () => {
   assert.equal(env.messages[0].type, 'OPEN_POWERSCHOOL_SCC');
   assert.equal(env.messages[0].url,
     'https://californiak12.powerschool.com/teachers/home.html#scc=attempt_123');
+});
+
+test('watcher does not depend on page Node or HTMLElement globals', () => {
+  const env = run({ approved: ['NEW-ROSTER'] });
+  const toast = new FakeElement();
+  toast.appendChild(new FakeText('SCC_HANDOFF_V1:no_dom_globals'));
+
+  assert.doesNotThrow(() => {
+    env.observer.callback([{ type: 'childList', addedNodes: [toast] }]);
+  });
+  assert.equal(env.messages.length, 1);
 });
 
 test('an identical handoff can be retried after the duplicate-toast window', () => {
