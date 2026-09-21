@@ -1,6 +1,6 @@
 # PowerSchool OR010 + ECC/SCC Helper
 
-This extension prepares PowerSchool ECC and Student Connection Call (SCC) logs from an approved roster Google Sheet and leaves **Submit** to the teacher. An SCC is usually a conversation with a parent at the start of a semester. The extension also adds an OR010 shortcut on PowerSchool teacher pages.
+This extension prepares PowerSchool ECC and Student Connection Call (SCC) logs from an approved roster Google Sheet and leaves **Submit** to the teacher. It can also open the selected student's Demographics screen when **Call Entry!B15** is selected. An SCC is usually a conversation with a parent at the start of a semester. The extension also adds an OR010 shortcut on PowerSchool teacher pages.
 
 ## Use with a new roster sheet
 
@@ -9,7 +9,7 @@ This extension prepares PowerSchool ECC and Student Connection Call (SCC) logs f
 3. Open the extension's **Details > Extension options**. Paste your roster Google Sheets URL and click **Approve sheet**. The approved sheet ID is saved only in your browser.
 4. Refresh the roster sheet tab. Use its Teacher Tools ECC or SCC handoff menu item.
 
-The extension watches for ECC and SCC handoffs on approved sheets without adding a persistent notification over Google Sheets. It opens a PowerSchool tab when a handoff is detected and shows an error only if the tab cannot be opened.
+The extension watches for ECC, SCC, and Demographics handoffs on approved sheets without adding a persistent notification over Google Sheets. It opens a PowerSchool tab when a handoff is detected and shows an error only if the tab cannot be opened.
 
 ## Login and retry behavior (3.2.3)
 
@@ -17,11 +17,15 @@ If PowerSchool asks you to sign in, the extension saves the pending ECC or SCC h
 
 ## Student Connection Call settings
 
-1. In **Call Entry**, choose the student, record the call and use **Teacher Tools > Save Student Connection Call & Open PowerSchool**. The SCC note saves to the SCC tab before the PowerSchool handoff. An unsuccessful call uses the next available Attempt column.
+1. In **Call Entry**, choose the student and record the call. Use **Teacher Tools > Save SCC Call Entry** to save it to the SCC tab. Separately, use **Teacher Tools > Log SCC in PowerSchool** to prepare the PowerSchool log. Logging does not save or change the SCC tab.
 2. On **Instructions and Settings** in the roster, use the four rows **SCC Success**, **SCC Attempt**, **ECC Conversation**, and **ECC Attempt**. Enter the exact PowerSchool Log Type value in column B and Subtype value in D. Columns C and E are labels for reference. The extension reads the row sent with each handoff; edits take effect on the next call without reinstalling. If an SCC row is blank, select Type/Subtype manually on PowerSchool and click the blue SCC button.
 3. The extension inserts the call note while preserving PowerSchool's template. Review the entire log and click **Submit** yourself. Older Apps Script handoffs without Settings values can still use previously remembered browser selections.
 
 The extension cannot verify which school-specific selections are correct; confirm them on the first log and review each prepared log before submitting. If PowerSchool cannot prepare the log, it stops and shows an error without submitting.
+
+## Open student Demographics
+
+Select a student on **Call Entry**, then select cell **B15**, labeled **Demographics Correct?**. The extension opens PowerSchool, switches to Sonoma if needed, searches by student number, and opens the Demographics screen. It does not create, edit, or submit a log. Because Google Sheets triggers this only when the selection changes, select another cell before selecting B15 again.
 
 ## Temporary settings capture (3.2.2)
 
@@ -35,6 +39,6 @@ This build reads Type/Subtype and optional additional dropdown choices from the 
 
 The recorder stores up to 20 selected-settings snapshots in extension storage; it does not store student numbers, note text, or free-text fields. This release does not apply a past ECC date automatically. Review every prepared log before submitting.
 
-The original 2Roster ORN sheet is approved automatically. If the encoded toast appears without opening PowerSchool, confirm you approved the correct sheet URL, reloaded the unpacked extension and refreshed the sheet tab. Updating files on GitHub alone does not update an installed extension.
+The original 2Roster ORN sheet and **6RosterORNFinal** are approved automatically. If the encoded toast appears without opening PowerSchool, reload the unpacked extension and refresh the sheet tab. For any other roster, confirm that you approved the correct sheet URL. Updating files on GitHub alone does not update an installed extension.
 
 If PowerSchool opens but the log is not prepared, check the visible error before proceeding manually. The browser console also logs messages prefixed `[PowerSchool ECC]` or `[PowerSchool SCC]`. The extension does not click Submit.
