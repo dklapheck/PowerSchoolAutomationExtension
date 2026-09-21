@@ -1,5 +1,8 @@
 'use strict';
 
+const HANDOFF_TAB_DEDUPE_MS = 2000;
+const recentHandoffTabs = new Map();
+
 // Opens the PowerSchool handoff in a new tab.
 // chrome.tabs.create does not require the broad "tabs" permission.
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -21,9 +24,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return;
   }
 
+  const now = Date.now();
+  const lastOpenedAt = recentHandoffTabs.get(url) || 0;
+  if (recentHandoffTabs.has(url) && now - lastOpenedAt < HANDOFF_TAB_DEDUPE_MS) {
+    sendResponse({ ok: true, deduplicated: true });
+    return;
+  }
+  recentHandoffTabs.set(url, now);
+
   chrome.tabs.create({ url, active: true })
     .then(() => sendResponse({ ok: true }))
     .catch(error => {
+      recentHandoffTabs.delete(url);
       console.error('[ECC Helper] Could not open PowerSchool tab.', error);
       sendResponse({
         ok: false,
