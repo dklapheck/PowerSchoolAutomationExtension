@@ -30,6 +30,129 @@
     return PRIVATE_FIELD.test([field.id, field.name, field.label].join(' '));
   }
 
+  function dateContext(control, scope) {
+    const candidates = [];
+    const add = value => {
+      const text = clean(value, 160);
+      if (text && DATE_FIELD.test(text) && !PRIVATE_FIELD.test(text)) {
+        candidates.push(text);
+      }
+    };
+
+    add(control.labels?.[0]?.textContent);
+    add(control.getAttribute('aria-label'));
+    add(control.getAttribute('placeholder'));
+    add(control.getAttribute('title'));
+
+    const labelledBy = clean(control.getAttribute('aria-labelledby'), 160);
+    for (const id of labelledBy.split(/\s+/).filter(Boolean)) {
+      add(document.getElementById(id)?.textContent);
+    }
+
+    const cell = control.closest('td, th');
+    add(cell?.previousElementSibling?.textContent);
+    add(cell?.textContent);
+    add(control.parentElement?.previousElementSibling?.textContent);
+    add(control.parentElement?.textContent);
+
+    const row = control.closest('tr');
+    if (row && cell) {
+      for (const item of row.children || []) {
+        if (item === cell) break;
+        add(item.textContent);
+      }
+    }
+
+    return candidates[0] || '';
+  }
+
+  function dateFieldMap(scope, host) {
+    const fields = [];
+    const seen = new Set();
+    for (const control of scope.querySelectorAll('input, select')) {
+      if (host.contains(control)) continue;
+      const inputType = clean(control.type || '', 40).toLowerCase();
+      if (['hidden', 'button', 'submit', 'reset'].includes(inputType)) continue;
+
+      const field = description(control, scope);
+      const label = dateContext(control, scope) || field.label;
+      const dateText = [field.id, field.name, field.label, label, inputType].join(' ');
+      if (!DATE_FIELD.test(dateText) && !['date', 'datetime-local', 'time'].includes(inputType)) {
+        continue;
+      }
+      const safeField = { ...field, label };
+      if (isPrivate(safeField) || (!field.id && !field.name)) continue;
+
+      const key = [control.tagName, field.id, field.name].join('|');
+      if (seen.has(key)) continue;
+      seen.add(key);
+      fields.push({
+        label: clean(label, 160),
+        id: field.id,
+        name: field.name,
+        tagName: clean(control.tagName, 20),
+        inputType: inputType || clean(control.tagName, 20).toLowerCase()
+      });
+    }
+    return fields;
+  }
+
+  function attemptTagMap(scope, host) {
+    const tags = [];
+    const seen = new Set();
+    const isAttempt = value => /^Attempt\s+[1-6]$/i.test(clean(value, 80));
+    const add = item => {
+      const key = JSON.stringify(item);
+      if (!seen.has(key)) {
+        seen.add(key);
+        tags.push(item);
+      }
+    };
+
+    for (const select of scope.querySelectorAll('select')) {
+      if (host.contains(select)) continue;
+      for (const option of select.options || []) {
+        const label = clean(option.textContent, 80);
+        if (!isAttempt(label)) continue;
+        add({
+          label,
+          value: clean(option.value, 120),
+          controlId: clean(select.id, 80),
+          controlName: clean(select.name, 80),
+          controlType: 'select'
+        });
+      }
+    }
+
+    for (const control of scope.querySelectorAll('input[type="checkbox"], input[type="radio"]')) {
+      if (host.contains(control)) continue;
+      const label = clean(control.labels?.[0]?.textContent ||
+        description(control, scope).label, 80);
+      if (!isAttempt(label)) continue;
+      add({
+        label,
+        value: clean(control.value, 120),
+        controlId: clean(control.id, 80),
+        controlName: clean(control.name, 80),
+        controlType: clean(control.type, 40)
+      });
+    }
+
+    for (const option of scope.querySelectorAll('[role="option"], [role="menuitemcheckbox"]')) {
+      if (host.contains(option)) continue;
+      const label = clean(option.textContent, 80);
+      if (!isAttempt(label)) continue;
+      add({
+        label,
+        value: clean(option.getAttribute('data-value'), 120),
+        controlId: clean(option.id, 80),
+        controlName: '',
+        controlType: clean(option.getAttribute('role'), 40)
+      });
+    }
+    return tags;
+  }
+
   function selected(control) {
     return {
       value: clean(control.value),
@@ -147,6 +270,14 @@
     copySettings.type = 'button';
     copySettings.textContent = 'Copy Type/Subtype for Settings';
     copySettings.style.marginLeft = '8px';
+    const copyDateFields = document.createElement('button');
+    copyDateFields.type = 'button';
+    copyDateFields.textContent = 'Copy Date Field Map';
+    copyDateFields.style.marginLeft = '8px';
+    const copyAttemptTags = document.createElement('button');
+    copyAttemptTags.type = 'button';
+    copyAttemptTags.textContent = 'Copy Attempt Tag Map';
+    copyAttemptTags.style.marginLeft = '8px';
     const status = document.createElement('p');
     status.setAttribute('role', 'status');
     const link = document.createElement('a');
@@ -154,7 +285,7 @@
     link.target = '_blank';
     link.rel = 'noopener noreferrer';
     link.textContent = 'PowerSchool Settings Log';
-    details.append(button, copySettings, status, link);
+    details.append(button, copySettings, copyDateFields, copyAttemptTags, status, link);
     host.append(details);
     logType.parentElement.insertAdjacentElement('afterend', host);
 
@@ -194,6 +325,44 @@
         status.textContent = 'Copied four cells. Paste into column B of the matching row in Instructions and Settings (SCC Success row 35, SCC Attempt 36, ECC Conversation 37, ECC Attempt 38).';
       } catch (error) {
         status.textContent = 'Could not copy Settings cells: ' + (error?.message || String(error));
+      }
+    });
+    copyDateFields.addEventListener('click', async () => {
+      try {
+        const fields = dateFieldMap(scope, host);
+        if (!fields.length) {
+          throw new Error('No date-labelled PowerSchool controls were found.');
+        }
+        const result = 'DATE_FIELD_MAP_V1:' + JSON.stringify({
+          schemaVersion: 1,
+          capturedAt: new Date().toISOString(),
+          scenario: scenario.value,
+          dateFields: fields
+        });
+        await navigator.clipboard.writeText(result);
+        status.textContent = 'Copied ' + fields.length +
+          ' date-field identifier(s). Paste into the Notes column of the next empty PowerSchool Settings Log row. No entered values were copied.';
+      } catch (error) {
+        status.textContent = 'Could not copy date fields: ' + (error?.message || String(error));
+      }
+    });
+    copyAttemptTags.addEventListener('click', async () => {
+      try {
+        const tags = attemptTagMap(scope, host);
+        if (!tags.length) {
+          throw new Error('No visible Attempt 1–6 tag options were found. Select the SCC Attempt Type/Subtype first.');
+        }
+        const result = 'ATTEMPT_TAG_MAP_V1:' + JSON.stringify({
+          schemaVersion: 1,
+          capturedAt: new Date().toISOString(),
+          scenario: scenario.value,
+          attemptTags: tags
+        });
+        await navigator.clipboard.writeText(result);
+        status.textContent = 'Copied ' + tags.length +
+          ' Attempt tag option(s). Paste into the Notes column of another empty PowerSchool Settings Log row.';
+      } catch (error) {
+        status.textContent = 'Could not copy Attempt tags: ' + (error?.message || String(error));
       }
     });
     return true;
