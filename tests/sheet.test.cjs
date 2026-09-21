@@ -40,12 +40,15 @@ function run({ approved = [], pathname = '/spreadsheets/d/NEW-ROSTER/edit', repl
   const body = new FakeElement();
   let now = 1000;
   let observer = null;
+  let poll = null;
+  const toastRegions = [];
   const messages = [];
   const document = {
     body,
     documentElement: new FakeElement(),
     getElementById: id => body.children.find(child => child.id === id) || null,
     createElement: () => new FakeElement(),
+    querySelectorAll: () => toastRegions,
     createTreeWalker(root) {
       const texts = [];
       function visit(node) {
@@ -79,12 +82,15 @@ function run({ approved = [], pathname = '/spreadsheets/d/NEW-ROSTER/edit', repl
   const context = vm.createContext({
     document, chrome, location: { pathname },
     MutationObserver: FakeObserver,
+    setInterval: callback => { poll = callback; return 1; },
     Date: FakeDate,
     console: { error() {} }
   });
   vm.runInContext(source, context);
   return {
     body, messages,
+    addToastRegion(node) { toastRegions.push(node); },
+    poll() { poll?.(); },
     advance(ms) { now += ms; },
     get observer() { return observer; },
     get status() { return document.getElementById('ecc-helper-status')?.textContent; }
@@ -123,6 +129,23 @@ test('watcher does not depend on page Node or HTMLElement globals', () => {
     env.observer.callback([{ type: 'childList', addedNodes: [toast] }]);
   });
   assert.equal(env.messages.length, 1);
+});
+
+test('toast polling fallback detects SCC and ECC live regions', () => {
+  const env = run({ approved: ['NEW-ROSTER'] });
+  const sccToast = new FakeElement();
+  sccToast.appendChild(new FakeText('SCC_HANDOFF_V1:scc_poll'));
+  const eccToast = new FakeElement();
+  eccToast.appendChild(new FakeText('ECC_HANDOFF_V1:ecc_poll'));
+  env.addToastRegion(sccToast);
+  env.addToastRegion(eccToast);
+
+  env.poll();
+
+  assert.deepEqual(env.messages.map(message => message.type), [
+    'OPEN_POWERSCHOOL_SCC',
+    'OPEN_POWERSCHOOL_ECC'
+  ]);
 });
 
 test('an identical handoff can be retried after the duplicate-toast window', () => {
