@@ -36,7 +36,7 @@ class FakeText {
   }
 }
 
-function run({ approved = [], pathname = '/spreadsheets/d/NEW-ROSTER/edit', reply = { ok: true } } = {}) {
+function run({ approved = [], pathname = '/spreadsheets/d/NEW-ROSTER/edit', href, referrer = '', topHref, reply = { ok: true } } = {}) {
   const body = new FakeElement();
   let now = 1000;
   let observer = null;
@@ -45,6 +45,7 @@ function run({ approved = [], pathname = '/spreadsheets/d/NEW-ROSTER/edit', repl
   const messages = [];
   const document = {
     body,
+    referrer,
     documentElement: new FakeElement(),
     getElementById: id => body.children.find(child => child.id === id) || null,
     createElement: () => new FakeElement(),
@@ -79,8 +80,11 @@ function run({ approved = [], pathname = '/spreadsheets/d/NEW-ROSTER/edit', repl
   class FakeDate extends Date {
     static now() { return now; }
   }
+  const locationHref = href || 'https://docs.google.com' + pathname;
+  const frameTop = { location: { href: topHref || locationHref } };
   const context = vm.createContext({
-    document, chrome, location: { pathname },
+    document, chrome, location: { pathname, href: locationHref },
+    top: frameTop, parent: frameTop,
     MutationObserver: FakeObserver,
     setInterval: callback => { poll = callback; return 1; },
     Date: FakeDate,
@@ -118,6 +122,25 @@ test('6RosterORNFinal is watched without a stored approval', () => {
   assert.equal(env.messages[0].type, 'OPEN_POWERSCHOOL_SCC');
   assert.equal(env.messages[0].url,
     'https://californiak12.powerschool.com/teachers/home.html#scc=attempt_123');
+});
+
+test('Chrome about-blank editor frame inherits the approved sheet ID', () => {
+  const sheetUrl =
+    'https://docs.google.com/spreadsheets/d/1_MpkySxTB6BYBB8In3ELRUsH2XpGjaeipMXxxGQb0To/edit';
+  const env = run({
+    pathname: 'blank',
+    href: 'about:blank',
+    referrer: sheetUrl,
+    topHref: sheetUrl
+  });
+  assert.ok(env.observer);
+
+  const toast = new FakeElement();
+  toast.appendChild(new FakeText('ECC_HANDOFF_V1:chrome_frame'));
+  env.observer.callback([{ type: 'childList', addedNodes: [toast] }]);
+
+  assert.equal(env.messages.length, 1);
+  assert.equal(env.messages[0].type, 'OPEN_POWERSCHOOL_ECC');
 });
 
 test('watcher does not depend on page Node or HTMLElement globals', () => {
