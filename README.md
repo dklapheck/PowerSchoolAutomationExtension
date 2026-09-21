@@ -13,7 +13,7 @@ The extension watches for ECC, SCC, and Demographics handoffs on approved sheets
 
 ## Login and retry behavior (3.2.3)
 
-If PowerSchool asks you to sign in, the extension saves the pending ECC or SCC handoff in that PowerSchool tab and resumes after the authenticated teacher page returns. Complete sign-in in the same tab. An identical handoff can also be retried from Google Sheets; only the brief duplicate burst produced by one Sheets toast is ignored.
+If PowerSchool asks you to sign in, the extension saves the pending ECC or SCC handoff in that PowerSchool tab and resumes after the authenticated teacher page returns. Complete sign-in in the same tab. An identical handoff can also be retried from Google Sheets after 15 seconds; repeated detections while the same toast remains visible are ignored.
 
 ## Student Connection Call settings
 
@@ -39,6 +39,6 @@ This build reads Type/Subtype and optional additional dropdown choices from the 
 
 The recorder stores up to 20 selected-settings snapshots in extension storage; it does not store student numbers, note text, or free-text fields. This release does not apply a past ECC date automatically. Review every prepared log before submitting.
 
-The original 2Roster ORN sheet and **6RosterORNFinal** are approved automatically. Version 3.3.3 watches Google Sheets editor frames and polls its toast/live regions as a fallback, so SCC, ECC, and Demographics handoffs do not depend on one specific Sheets DOM mutation. Duplicate reports from multiple frames open only one PowerSchool tab. If the encoded toast appears without opening PowerSchool, reload the unpacked extension and refresh the sheet tab. For any other roster, confirm that you approved the correct sheet URL. Updating files on GitHub alone does not update an installed extension.
+The original 2Roster ORN sheet and **6RosterORNFinal** are approved automatically. Version 3.3.4 watches Google Sheets editor frames and polls its toast/live regions as a fallback, so SCC, ECC, and Demographics handoffs do not depend on one specific Sheets DOM mutation. Repeated reports from the same visible toast, including reports from multiple frames, open only one PowerSchool tab. If the encoded toast appears without opening PowerSchool, reload the unpacked extension and refresh the sheet tab. For any other roster, confirm that you approved the correct sheet URL. Updating files on GitHub alone does not update an installed extension.
 
 If PowerSchool opens but the log is not prepared, check the visible error before proceeding manually. The browser console also logs messages prefixed `[PowerSchool ECC]` or `[PowerSchool SCC]`. The extension does not click Submit.
