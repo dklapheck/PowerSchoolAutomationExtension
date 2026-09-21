@@ -1,6 +1,8 @@
 'use strict';
 
-const HANDOFF_TAB_DEDUPE_MS = 2000;
+// Multiple Google Sheets frames can report the same visible toast. Keep the
+// cross-frame guard longer than the toast's roughly 10-second lifetime.
+const HANDOFF_TAB_DEDUPE_MS = 15000;
 const recentHandoffTabs = new Map();
 
 // Opens the PowerSchool handoff in a new tab.
