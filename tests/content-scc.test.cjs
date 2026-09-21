@@ -48,7 +48,7 @@ function fixture({
   const subtype = makeSelect([['', 'Choose Subtype'], ['GE:ECC', 'ECC'], ['SCC_PARENT', 'Parent Connection Call']]);
   const pagePicker = makeSelect(pageOptions);
   pagePicker.value = pageValue;
-  const tagSelect = makeSelect([['', 'Choose Tag'], ['attempt_1', 'Attempt 1']]);
+  const tagSelect = makeSelect([['', 'Choose Tag'], ['attempt_1', 'Attempt 1 (34)']]);
   tagSelect.name = 'tag';
   const dateInput = makeElement();
   dateInput.id = 'entryLogDate';
