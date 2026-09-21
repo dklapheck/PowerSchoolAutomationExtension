@@ -30,7 +30,9 @@
   const POWERSCHOOL_BASE =
     'https://californiak12.powerschool.com/teachers/home.html#';
   const STATUS_ID = 'ecc-helper-status';
-  const HANDOFF_DEDUPE_MS = 1500;
+  // Sheets keeps handoff toasts visible for about 10 seconds. Keep the
+  // per-frame guard longer so polling cannot rediscover the same handoff.
+  const HANDOFF_DEDUPE_MS = 15000;
   const ELEMENT_NODE = 1;
   const TEXT_NODE = 3;
   const SHOW_TEXT = 4;
@@ -112,9 +114,9 @@
     if (handoffKey === lastHandoffKey &&
         now - lastHandoffAt < HANDOFF_DEDUPE_MS) return;
 
-    // A Sheets toast can be reported through several nested DOM mutations.
-    // Suppress that brief burst, but allow the teacher to retry the exact
-    // same handoff after the toast is shown again.
+    // A Sheets toast can be reported through several nested DOM mutations
+    // and repeated polling passes. Suppress it for the toast's visible life,
+    // then allow the teacher to retry the exact same handoff.
     lastHandoffKey = handoffKey;
     lastHandoffAt = now;
     replaceVisibleMarker(node);
