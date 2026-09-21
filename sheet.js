@@ -31,6 +31,9 @@
     'https://californiak12.powerschool.com/teachers/home.html#';
   const STATUS_ID = 'ecc-helper-status';
   const HANDOFF_DEDUPE_MS = 1500;
+  const ELEMENT_NODE = 1;
+  const TEXT_NODE = 3;
+  const SHOW_TEXT = 4;
   let lastHandoffKey = '';
   let lastHandoffAt = 0;
 
@@ -72,15 +75,16 @@
   }
 
   function replaceVisibleMarker(node) {
-    const handoff = extractHandoff(node.nodeType === Node.TEXT_NODE
+    if (!node || typeof node.nodeType !== 'number') return;
+    const handoff = extractHandoff(node.nodeType === TEXT_NODE
       ? node.nodeValue : node.textContent);
     if (!handoff) return;
     const friendly = 'Opening PowerSchool ' + handoff.kind + ' log…';
-    if (node.nodeType === Node.TEXT_NODE) {
+    if (node.nodeType === TEXT_NODE) {
       if (String(node.nodeValue || '').includes(handoff.prefix)) {
         node.nodeValue = friendly;
       }
-    } else if (node instanceof HTMLElement &&
+    } else if (node.nodeType === ELEMENT_NODE &&
         node.childElementCount === 0 &&
         String(node.textContent || '').includes(handoff.prefix)) {
       node.textContent = friendly;
@@ -88,7 +92,8 @@
   }
 
   function handleCandidate(node) {
-    const value = node.nodeType === Node.TEXT_NODE
+    if (!node || typeof node.nodeType !== 'number') return;
+    const value = node.nodeType === TEXT_NODE
       ? node.nodeValue
       : node.textContent;
     // Avoid scanning the entire spreadsheet DOM as one string.
@@ -123,18 +128,18 @@
 
   function scanNode(node) {
     if (!node) return;
-    if (node.nodeType === Node.TEXT_NODE) {
+    if (node.nodeType === TEXT_NODE) {
       handleCandidate(node);
       // Sheets may split a toast marker between sibling text nodes.
       if (node.parentElement) handleCandidate(node.parentElement);
       return;
     }
-    if (node.nodeType !== Node.ELEMENT_NODE || node.id === STATUS_ID) return;
+    if (node.nodeType !== ELEMENT_NODE || node.id === STATUS_ID) return;
 
     // Read the whole small toast as well as its text nodes. A single
     // marker can be split across nested spans in the Sheets interface.
     handleCandidate(node);
-    const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+    const walker = document.createTreeWalker(node, SHOW_TEXT);
     let current;
     while ((current = walker.nextNode())) handleCandidate(current);
   }
