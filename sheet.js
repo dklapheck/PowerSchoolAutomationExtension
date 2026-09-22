@@ -27,8 +27,17 @@
     'https://californiak12.powerschool.com/teachers/home.html#';
   const STATUS_ID = 'ecc-helper-status';
   const HANDOFF_DEDUPE_MS = 1500;
+  const LIVE_REGION_SELECTOR = [
+    '[role="alert"]',
+    '[role="status"]',
+    '[aria-live="polite"]',
+    '[aria-live="assertive"]',
+    '.docs-material-snackbar',
+    '.docs-material-snackbar-content'
+  ].join(',');
   let lastHandoffKey = '';
   let lastHandoffAt = 0;
+  const polledHandoffKeys = new Set();
 
   function showError(message) {
     let badge = document.getElementById(STATUS_ID);
@@ -93,6 +102,7 @@
     if (!handoff) return;
 
     const handoffKey = handoff.kind + handoff.encoded;
+    polledHandoffKeys.add(handoffKey);
     const now = Date.now();
     if (handoffKey === lastHandoffKey &&
         now - lastHandoffAt < HANDOFF_DEDUPE_MS) return;
@@ -136,6 +146,18 @@
   }
 
   function startWatching() {
+    function getLiveRegions() {
+      if (typeof document.querySelectorAll !== 'function') return [];
+      return Array.from(document.querySelectorAll(LIVE_REGION_SELECTOR));
+    }
+
+    // Treat markers already visible when the extension starts as history.
+    // This prevents a page refresh from replaying the previous handoff.
+    for (const region of getLiveRegions()) {
+      const handoff = extractHandoff(region.textContent);
+      if (handoff) polledHandoffKeys.add(handoff.kind + handoff.encoded);
+    }
+
     const observer = new MutationObserver(mutations => {
       for (const mutation of mutations) {
         if (mutation.type === 'characterData') scanNode(mutation.target);
@@ -154,6 +176,19 @@
     });
     // Only react to markers that appear after the watcher starts. Scanning
     // existing page text here can replay a prior handoff when Sheets reloads.
+
+    // Some Sheets snackbar updates do not produce a useful mutation in every
+    // Chrome build. Poll only toast/live regions as a fallback; never scan the
+    // spreadsheet grid or Automation Log cells.
+    setInterval(() => {
+      for (const region of getLiveRegions()) {
+        const handoff = extractHandoff(region.textContent);
+        if (!handoff) continue;
+        const handoffKey = handoff.kind + handoff.encoded;
+        if (polledHandoffKeys.has(handoffKey)) continue;
+        handleCandidate(region);
+      }
+    }, 500);
   }
 
   const match = location.pathname.match(
