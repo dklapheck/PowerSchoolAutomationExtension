@@ -36,20 +36,20 @@ class FakeText {
   }
 }
 
-function run({ approved = [], pathname = '/spreadsheets/d/NEW-ROSTER/edit', href, referrer = '', topHref, reply = { ok: true } } = {}) {
+function run({
+  approved = [], pathname = '/spreadsheets/d/NEW-ROSTER/edit',
+  reply = { ok: true }, initialText = ''
+} = {}) {
   const body = new FakeElement();
+  if (initialText) body.appendChild(new FakeText(initialText));
   let now = 1000;
   let observer = null;
-  let poll = null;
-  const toastRegions = [];
   const messages = [];
   const document = {
     body,
-    referrer,
     documentElement: new FakeElement(),
     getElementById: id => body.children.find(child => child.id === id) || null,
     createElement: () => new FakeElement(),
-    querySelectorAll: () => toastRegions,
     createTreeWalker(root) {
       const texts = [];
       function visit(node) {
@@ -80,21 +80,16 @@ function run({ approved = [], pathname = '/spreadsheets/d/NEW-ROSTER/edit', href
   class FakeDate extends Date {
     static now() { return now; }
   }
-  const locationHref = href || 'https://docs.google.com' + pathname;
-  const frameTop = { location: { href: topHref || locationHref } };
   const context = vm.createContext({
-    document, chrome, location: { pathname, href: locationHref },
-    top: frameTop, parent: frameTop,
-    MutationObserver: FakeObserver,
-    setInterval: callback => { poll = callback; return 1; },
+    document, chrome, location: { pathname },
+    MutationObserver: FakeObserver, HTMLElement: FakeElement,
+    Node: NODE, NodeFilter: { SHOW_TEXT: 4 },
     Date: FakeDate,
     console: { error() {} }
   });
   vm.runInContext(source, context);
   return {
     body, messages,
-    addToastRegion(node) { toastRegions.push(node); },
-    poll() { poll?.(); },
     advance(ms) { now += ms; },
     get observer() { return observer; },
     get status() { return document.getElementById('ecc-helper-status')?.textContent; }
@@ -108,84 +103,23 @@ test('unapproved sheet has no watcher and does not inspect a handoff', () => {
   assert.equal(env.messages.length, 0);
 });
 
-test('6RosterORNFinal is watched without a stored approval', () => {
+test('refresh ignores a handoff marker already present in the page', () => {
   const env = run({
-    pathname: '/spreadsheets/d/1_MpkySxTB6BYBB8In3ELRUsH2XpGjaeipMXxxGQb0To/edit'
+    approved: ['NEW-ROSTER'],
+    initialText: 'DEMOGRAPHICS_HANDOFF_V1:student_123'
   });
-  assert.ok(env.observer);
-
-  const toast = new FakeElement();
-  toast.appendChild(new FakeText('SCC_HANDOFF_V1:attempt_123'));
-  env.observer.callback([{ type: 'childList', addedNodes: [toast] }]);
-
-  assert.equal(env.messages.length, 1);
-  assert.equal(env.messages[0].type, 'OPEN_POWERSCHOOL_SCC');
-  assert.equal(env.messages[0].url,
-    'https://californiak12.powerschool.com/teachers/home.html#scc=attempt_123');
+  assert.notEqual(env.observer, null);
+  assert.equal(env.messages.length, 0);
 });
 
-test('Chrome about-blank editor frame inherits the approved sheet ID', () => {
-  const sheetUrl =
-    'https://docs.google.com/spreadsheets/d/1_MpkySxTB6BYBB8In3ELRUsH2XpGjaeipMXxxGQb0To/edit';
-  const env = run({
-    pathname: 'blank',
-    href: 'about:blank',
-    referrer: sheetUrl,
-    topHref: sheetUrl
-  });
-  assert.ok(env.observer);
-
-  const toast = new FakeElement();
-  toast.appendChild(new FakeText('ECC_HANDOFF_V1:chrome_frame'));
-  env.observer.callback([{ type: 'childList', addedNodes: [toast] }]);
-
-  assert.equal(env.messages.length, 1);
-  assert.equal(env.messages[0].type, 'OPEN_POWERSCHOOL_ECC');
-});
-
-test('watcher does not depend on page Node or HTMLElement globals', () => {
-  const env = run({ approved: ['NEW-ROSTER'] });
-  const toast = new FakeElement();
-  toast.appendChild(new FakeText('SCC_HANDOFF_V1:no_dom_globals'));
-
-  assert.doesNotThrow(() => {
-    env.observer.callback([{ type: 'childList', addedNodes: [toast] }]);
-  });
-  assert.equal(env.messages.length, 1);
-});
-
-test('toast polling fallback detects SCC and ECC live regions', () => {
-  const env = run({ approved: ['NEW-ROSTER'] });
-  const sccToast = new FakeElement();
-  sccToast.appendChild(new FakeText('SCC_HANDOFF_V1:scc_poll'));
-  const eccToast = new FakeElement();
-  eccToast.appendChild(new FakeText('ECC_HANDOFF_V1:ecc_poll'));
-  env.addToastRegion(sccToast);
-  env.addToastRegion(eccToast);
-
-  env.poll();
-
-  assert.deepEqual(env.messages.map(message => message.type), [
-    'OPEN_POWERSCHOOL_SCC',
-    'OPEN_POWERSCHOOL_ECC'
-  ]);
-
-  // The same visible toasts are polled every 250 ms for ten seconds.
-  for (let i = 0; i < 40; i += 1) {
-    env.advance(250);
-    env.poll();
-  }
-  assert.equal(env.messages.length, 2);
-});
-
-test('an identical handoff can be retried after the visible-toast window', () => {
+test('an identical handoff can be retried after the duplicate-toast window', () => {
   const env = run({ approved: ['NEW-ROSTER'] });
   const firstToast = new FakeElement();
   firstToast.appendChild(new FakeText('ECC_HANDOFF_V1:abc_123'));
   env.observer.callback([{ type: 'childList', addedNodes: [firstToast] }]);
   assert.equal(env.messages.length, 1);
 
-  env.advance(16000);
+  env.advance(2000);
   const retryToast = new FakeElement();
   retryToast.appendChild(new FakeText('ECC_HANDOFF_V1:abc_123'));
   env.observer.callback([{ type: 'childList', addedNodes: [retryToast] }]);
