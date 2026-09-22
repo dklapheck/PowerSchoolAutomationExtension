@@ -44,12 +44,14 @@ function run({
   if (initialText) body.appendChild(new FakeText(initialText));
   let now = 1000;
   let observer = null;
+  let poll = null;
   const messages = [];
   const document = {
     body,
     documentElement: new FakeElement(),
     getElementById: id => body.children.find(child => child.id === id) || null,
     createElement: () => new FakeElement(),
+    querySelectorAll: () => [body],
     createTreeWalker(root) {
       const texts = [];
       function visit(node) {
@@ -85,12 +87,14 @@ function run({
     MutationObserver: FakeObserver, HTMLElement: FakeElement,
     Node: NODE, NodeFilter: { SHOW_TEXT: 4 },
     Date: FakeDate,
+    setInterval: callback => { poll = callback; return 1; },
     console: { error() {} }
   });
   vm.runInContext(source, context);
   return {
     body, messages,
     advance(ms) { now += ms; },
+    poll() { if (poll) poll(); },
     get observer() { return observer; },
     get status() { return document.getElementById('ecc-helper-status')?.textContent; }
   };
@@ -110,6 +114,16 @@ test('refresh ignores a handoff marker already present in the page', () => {
   });
   assert.notEqual(env.observer, null);
   assert.equal(env.messages.length, 0);
+  env.poll();
+  assert.equal(env.messages.length, 0);
+});
+
+test('live-region polling catches a new handoff when a mutation is missed', () => {
+  const env = run({ approved: ['NEW-ROSTER'] });
+  env.body.appendChild(new FakeText('DEMOGRAPHICS_HANDOFF_V1:student_456'));
+  env.poll();
+  assert.equal(env.messages.length, 1);
+  assert.equal(env.messages[0].type, 'OPEN_POWERSCHOOL_DEMOGRAPHICS');
 });
 
 test('an identical handoff can be retried after the duplicate-toast window', () => {
