@@ -9,7 +9,7 @@ This extension prepares PowerSchool ECC and Student Connection Call (SCC) logs f
 3. Open the extension's **Details > Extension options**. Paste your roster Google Sheets URL and click **Approve sheet**. The approved sheet ID is saved only in your browser.
 4. Refresh the roster sheet tab. Use its Teacher Tools ECC or SCC handoff menu item.
 
-The extension watches for ECC, SCC, and Demographics handoffs on approved sheets without adding a persistent notification over Google Sheets. It opens a PowerSchool tab when a new handoff is detected and shows an error only if the tab cannot be opened. Version 3.5.1 does not scan old page text after a sheet reload and keeps a shared replay guard across Google Sheets frames, preventing one handoff from opening many tabs.
+The extension watches for ECC, SCC, and Demographics handoffs on approved sheets without adding a persistent notification over Google Sheets. It opens a PowerSchool tab when a new handoff is detected and shows an error only if the tab cannot be opened. Version 3.5.2 does not scan old page text after a sheet reload, keeps a shared short duplicate guard across Google Sheets frames, and polls only toast/live regions when Chrome misses the normal DOM mutation. It never polls spreadsheet cells or Automation Log content.
 
 ## Login and retry behavior (3.2.3)
 
