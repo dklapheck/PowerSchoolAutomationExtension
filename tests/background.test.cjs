@@ -52,14 +52,14 @@ test('background opens only one tab for simultaneous identical handoffs', async 
   assert.equal(results.filter(result => result.duplicate).length, 2);
 });
 
-test('a new handoff can open after the replay-protection window', async () => {
+test('a handoff can be retried a few seconds after the duplicate burst', async () => {
   const env = run();
   const message = {
     type: 'OPEN_POWERSCHOOL_SCC',
     url: 'https://californiak12.powerschool.com/teachers/home.html#scc=abc_123'
   };
   await env.send(message);
-  env.advance(10 * 60 * 1000 + 1);
+  env.advance(3001);
   await env.send(message);
   assert.equal(env.opened.length, 2);
 });
