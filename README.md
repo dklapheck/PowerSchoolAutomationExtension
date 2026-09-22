@@ -1,6 +1,6 @@
 # PowerSchool Helper
 
-This extension prepares PowerSchool ECC and Student Connection Call (SCC) logs from an approved roster Google Sheet and leaves **Submit** to the teacher. It can also open the selected student's Demographics screen when **Call Entry!B15** is selected. An SCC is usually a conversation with a parent at the start of a semester. The extension also adds an OR010 shortcut on PowerSchool teacher pages.
+This extension prepares PowerSchool ECC and Student Connection Call (SCC) logs from an approved roster Google Sheet and leaves **Submit** to the teacher. It can also open a selected student's Demographics screen from **Teacher Tools > Open Demographics**. An SCC is usually a conversation with a parent at the start of a semester. The extension also adds an OR010 shortcut on PowerSchool teacher pages.
 
 ## Use with a new roster sheet
 
@@ -9,7 +9,7 @@ This extension prepares PowerSchool ECC and Student Connection Call (SCC) logs f
 3. Open the extension's **Details > Extension options**. Paste your roster Google Sheets URL and click **Approve sheet**. The approved sheet ID is saved only in your browser.
 4. Refresh the roster sheet tab. Use its Teacher Tools ECC or SCC handoff menu item.
 
-The extension watches for ECC, SCC, and Demographics handoffs on approved sheets without adding a persistent notification over Google Sheets. It opens a PowerSchool tab when a handoff is detected and shows an error only if the tab cannot be opened.
+The extension watches for ECC, SCC, and Demographics handoffs on approved sheets without adding a persistent notification over Google Sheets. It opens a PowerSchool tab when a new handoff is detected and shows an error only if the tab cannot be opened. Version 3.5.1 does not scan old page text after a sheet reload and keeps a shared replay guard across Google Sheets frames, preventing one handoff from opening many tabs.
 
 ## Login and retry behavior (3.2.3)
 
@@ -25,7 +25,7 @@ The extension cannot verify which school-specific selections are correct; confir
 
 ## Open student Demographics
 
-Select a student on **Call Entry**, then select cell **B15**, labeled **Demographics Correct?**. The extension opens PowerSchool, switches to Sonoma if needed, searches by student number, and opens the Demographics screen. It does not create, edit, or submit a log. Because Google Sheets triggers this only when the selection changes, select another cell before selecting B15 again.
+On **Call Entry**, select the student and choose **Teacher Tools > Open Demographics**. On another tab, select one cell containing a Student Number before choosing the same menu action. The extension opens PowerSchool, switches to Sonoma if needed, searches by student number, and opens the Demographics screen. It does not create, edit, or submit a log.
 
 ## Temporary settings capture (3.5.0)
 
