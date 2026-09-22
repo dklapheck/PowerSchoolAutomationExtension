@@ -25,6 +25,8 @@
   const OR010_BUTTON_ID = 'ps-or010-homeroom-button';
 
   const ECC_STORAGE_KEY = 'ps_ecc_workflow_payload_v1';
+  const PENDING_HANDOFF_STORAGE_KEY = 'ps_pending_handoff_v1';
+  const PENDING_HANDOFF_MAX_AGE_MS = 30 * 60 * 1000;
   const ECC_BUTTON_ID = 'ps-ecc-status-button';
   const ECC_MAX_STEPS = 12;
   const SCC_TYPE_KEY = 'sccLogTypeValue';
@@ -487,6 +489,7 @@
 
       const state = {
         kind,
+        requestId: String(payload.requestId || '').trim(),
         studentNumber,
         date,
         note,
@@ -511,18 +514,6 @@
         startedAt: Date.now()
       };
 
-      if (kind !== 'DEMOGRAPHICS') {
-        // Keep only non-student form context for the temporary settings capture.
-        // The note and student number remain in the short-lived workflow state.
-        sessionStorage.setItem('ps_form_capture_context_v1', JSON.stringify({
-          kind,
-          date: kind === 'ECC' ? date : '',
-          outcome: kind === 'SCC' ? state.outcome :
-            (state.outcome === 'ECC Attempt' || /\[Attempt\]/.test(note))
-              ? 'Attempt' : 'Conversation'
-        }));
-      }
-
       sessionStorage.setItem(
         ECC_STORAGE_KEY,
         JSON.stringify(state)
@@ -537,7 +528,7 @@
       );
 
       showPersistentError(
-        kind + ' handoff from Google Sheets could not be read',
+        kind + ' handoff could not be read',
         error?.message || String(error)
       );
 
@@ -565,8 +556,43 @@
     );
   }
 
+  function persistPendingHandoff_(state) {
+    return chrome.storage.local.set({
+      [PENDING_HANDOFF_STORAGE_KEY]: {
+        savedAt: Date.now(),
+        state: state
+      }
+    }).catch(() => {
+      // sessionStorage remains the same-tab fallback.
+    });
+  }
+
+  async function restorePendingHandoff_() {
+    try {
+      const stored = await chrome.storage.local.get({
+        [PENDING_HANDOFF_STORAGE_KEY]: null
+      });
+      const record = stored[PENDING_HANDOFF_STORAGE_KEY];
+      const state = record && record.state;
+      const age = Date.now() - Number(record?.savedAt || 0);
+      if (!state || age < 0 || age > PENDING_HANDOFF_MAX_AGE_MS ||
+          !/^\d+$/.test(String(state.studentNumber || '')) ||
+          !['DEMOGRAPHICS', 'SCC', 'ECC'].includes(state.kind)) {
+        if (record) await chrome.storage.local.remove(PENDING_HANDOFF_STORAGE_KEY);
+        return null;
+      }
+      sessionStorage.setItem(ECC_STORAGE_KEY, JSON.stringify(state));
+      // Claim this backup so another post-login tab cannot replay it.
+      await chrome.storage.local.remove(PENDING_HANDOFF_STORAGE_KEY);
+      return state;
+    } catch (_) {
+      return null;
+    }
+  }
+
   function clearECCState() {
     sessionStorage.removeItem(ECC_STORAGE_KEY);
+    chrome.storage.local.remove(PENDING_HANDOFF_STORAGE_KEY).catch(() => {});
   }
 
   function getWorkflowLabel(kind) {
@@ -773,7 +799,29 @@
     return logOption?.value || null;
   }
 
+  function isSamePowerSchoolScreen(url) {
+    try {
+      const target = new URL(url, location.href);
+      const current = new URL(location.href);
+      // Resolve relative links against this document, ignore fragments, and
+      // normalize query ordering. Keep query values (especially frn) intact.
+      target.searchParams.sort();
+      current.searchParams.sort();
+      return target.origin === current.origin &&
+        target.pathname.toLowerCase() === current.pathname.toLowerCase() &&
+        target.search === current.search;
+    } catch (_) {
+      return false;
+    }
+  }
+
   function getDemographicsScreen() {
+    // This page can be rendered without the navigation picker.
+    if (location.pathname.toLowerCase()
+      .endsWith('/teachers/studentpages/demographics.html')) {
+      return { isCurrent: true, url: '' };
+    }
+
     const screenPicker = document.querySelector(
       'select[name="page"]'
     );
@@ -786,13 +834,17 @@
     );
     if (!option) return null;
 
-    const selected = screenPicker.selectedOptions?.[0] ||
-      screenPicker.options[screenPicker.selectedIndex];
+    // PowerSchool can keep the previous selection on both Contacts and
+    // Demographics. The option's destination is authoritative, not selection.
     return {
-      isCurrent: selected === option ||
-        normalize(selected?.textContent).toLowerCase() === 'demographics',
+      isCurrent: !!option.value && isSamePowerSchoolScreen(option.value),
       url: option.value || ''
     };
+  }
+
+  function finishDemographics() {
+    clearECCState();
+    setECCButton('Demographics open — review student information', 'ready');
   }
 
   // ============================================================
@@ -1154,7 +1206,6 @@
       subtype.selectedOptions[0]?.textContent?.trim() || '';
 
     console.log('[PowerSchool ' + kind + '] Prepared:', {
-      studentNumber: state.studentNumber,
       date: state.date,
       logType: selectedLogType,
       subtype: selectedSubtype
@@ -1243,6 +1294,10 @@
       return;
     }
 
+    // Authentication is complete. Same-origin PowerSchool navigation keeps
+    // sessionStorage, so the cross-tab SSO backup is no longer needed.
+    await chrome.storage.local.remove(PENDING_HANDOFF_STORAGE_KEY).catch(() => {});
+
     state.stepCount = Number(state.stepCount || 0) + 1;
     saveECCState(state);
 
@@ -1254,9 +1309,27 @@
     try {
       console.log('[PowerSchool ECC] Continuing workflow:', {
         path: location.pathname,
-        studentNumber: state.studentNumber,
         step: state.stepCount
       });
+
+      // The final Demographics navigation is allowed once per handoff. This
+      // marker survives document loads, including redirects back to Home or
+      // Contacts. Never restart the search or reassign the destination here.
+      if (kind === 'DEMOGRAPHICS' && state.demographicsNavigationUrl) {
+        const target = new URL(state.demographicsNavigationUrl);
+        const current = new URL(location.href);
+        const sameStudent = !target.searchParams.has('frn') ||
+          target.searchParams.get('frn') === current.searchParams.get('frn');
+        if (sameStudent && (isSamePowerSchoolScreen(target.href) ||
+            getDemographicsScreen()?.isCurrent)) {
+          finishDemographics();
+        } else {
+          throw new Error('PowerSchool did not stay on the requested Demographics screen. ' +
+            'Automatic navigation has stopped to prevent a reload loop. ' +
+            'Choose Demographics manually, or start a new Teacher Tools dialog to try again.');
+        }
+        return;
+      }
 
       // --------------------------------------------------------
       // 1. CREATE NEW LOG FORM
@@ -1321,14 +1394,20 @@
             100
           );
           if (demographics.isCurrent) {
-            clearECCState();
-            setECCButton('Demographics open — review student information', 'ready');
+            finishDemographics();
             return;
           }
           if (!demographics.url) {
             throw new Error('PowerSchool did not provide a Demographics screen URL.');
           }
 
+          const target = new URL(demographics.url, location.href);
+          if (target.origin !== location.origin ||
+              !target.pathname.toLowerCase().startsWith('/teachers/studentpages/')) {
+            throw new Error('PowerSchool did not provide a valid student Demographics screen URL.');
+          }
+          state.demographicsNavigationUrl = target.href;
+          saveECCState(state); // Persist the attempt before the document unloads.
           location.assign(demographics.url);
           return;
         }
@@ -1475,23 +1554,32 @@
     }
   }
 
-  importPowerSchoolPayloadFromHash();
+  async function startPowerSchoolHandoff_() {
+    const imported = importPowerSchoolPayloadFromHash();
+    if (imported) await persistPendingHandoff_(imported);
 
-  // PowerSchool may redirect an unauthenticated teacher request to /public/.
-  // Capture the hash there before the login form removes it. The same tab's
-  // sessionStorage survives the sign-in round trip back to /teachers/.
-  if (!isTeacherPage) {
-    const pending = loadECCState();
-    if (pending) {
-      const kind = getWorkflowLabel(pending.kind || 'ECC');
-      setECCButton(
-        kind + ' handoff saved — sign in to continue'
-      );
+    // Some SSO flows finish in a different tab or browser document, which
+    // loses sessionStorage. Restore the most recent short-lived handoff from
+    // extension storage and remove that backup as soon as it is claimed.
+    const pending = loadECCState() || await restorePendingHandoff_();
+
+    if (!isTeacherPage) {
+      if (pending) {
+        const kind = getWorkflowLabel(pending.kind || 'ECC');
+        setECCButton(
+          kind + ' handoff saved — sign in to continue'
+        );
+      }
+      return;
     }
-    return;
+
+    if (pending) continueECCWorkflow();
   }
 
-  if (loadECCState()) {
-    continueECCWorkflow();
-  }
+  startPowerSchoolHandoff_().catch(() => {
+    showPersistentError(
+      'PowerSchool handoff could not start',
+      'Reload this PowerSchool tab and try the Teacher Tools action again.'
+    );
+  });
 })();

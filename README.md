@@ -1,46 +1,96 @@
 # PowerSchool Helper
 
-This extension prepares PowerSchool ECC and Student Connection Call (SCC) logs from an approved roster Google Sheet and leaves **Submit** to the teacher. It can also open a selected student's Demographics screen from **Teacher Tools > Open Demographics**. An SCC is usually a conversation with a parent at the start of a semester. The extension also adds an OR010 shortcut on PowerSchool teacher pages.
+PowerSchool Helper prepares Demographics, Student Connection Call (SCC), and Engagement Check Call (ECC) workflows inside PowerSchool. It also adds the OR010 shortcut to PowerSchool teacher pages. The extension never clicks **Submit** on a PowerSchool log.
 
-## Use with a new roster sheet
+Google Sheets is not in the extension manifest. The roster's Apps Script displays an explicit dialog, and the teacher clicks **Open PowerSchool** to open one tab containing a short-lived handoff in the URL hash.
 
-1. Download this repository and replace the files in the folder used by your unpacked extension.
-2. Open `chrome://extensions` (or `edge://extensions`) and click **Reload** for this extension.
-3. Open the extension's **Details > Extension options**. Paste your roster Google Sheets URL and click **Approve sheet**. The approved sheet ID is saved only in your browser.
-4. Refresh the roster sheet tab. Use its Teacher Tools ECC or SCC handoff menu item.
+## Installation and updating
 
-The extension watches for ECC, SCC, and Demographics handoffs on approved sheets without adding a persistent notification over Google Sheets. It opens a PowerSchool tab when a new handoff is detected and shows an error only if the tab cannot be opened. Version 3.5.2 does not scan old page text after a sheet reload, keeps a shared short duplicate guard across Google Sheets frames, and polls only toast/live regions when Chrome misses the normal DOM mutation. It never polls spreadsheet cells or Automation Log content.
+1. Download or clone version **3.6.2** from the **dialog-handoff** branch.
+2. Open `chrome://extensions` or `edge://extensions`.
+3. Turn on **Developer mode**.
+4. Choose **Load unpacked** and select this repository folder.
 
-## Login and retry behavior (3.2.3)
+To update an existing unpacked installation, replace its files with the new repository version, return to the extensions page, and click **Reload**. Confirm the extension shows **3.6.2**. Close any looping PowerSchool tabs and start a fresh handoff from a newly generated roster dialog. If multiple copies of PowerSchool Helper are installed, disable the older copies. Updating GitHub alone does not update an installed unpacked extension.
 
-If PowerSchool asks you to sign in, the extension saves the pending ECC or SCC handoff in that PowerSchool tab and resumes after the authenticated teacher page returns. Complete sign-in in the same tab. An identical handoff can also be retried from Google Sheets after 60 seconds; repeated detections from the same action are ignored.
+## Demographics workflow
 
-## Student Connection Call settings
+1. In the roster, choose **Teacher Tools > Open Demographics**.
+2. On Call Entry, Apps Script uses the student selected in the form. On another tab, it uses the one selected Student Number cell.
+3. In the dialog, click **Open PowerSchool**.
+4. The extension switches to the required school when necessary, searches for the student, and opens Demographics.
 
-1. In **Call Entry**, choose the student and record the call. Use **Teacher Tools > Save SCC Call Entry** to save it to the SCC tab. Separately, use **Teacher Tools > Log SCC in PowerSchool** to prepare the PowerSchool log. Logging does not save or change the SCC tab.
-2. On **Instructions and Settings** in the roster, use the four rows **SCC Success**, **SCC Attempt**, **ECC Conversation**, and **ECC Attempt**. Enter the exact PowerSchool Log Type value in column B and Subtype value in D. Columns H:J identify Date & Time, Incident Date, and Action Date; column K contains the Attempt 1–6 tag map. Columns C and E are labels for reference, and F can hold additional dropdown JSON. The extension reads the row sent with each handoff, so edits take effect on the next call without reinstalling.
-3. The extension sets all three requested dates, applies the tag matching the saved or next open Attempt column, and inserts the call note while preserving PowerSchool's template. It stops on a missing, duplicated, or rejected configured control. Review the entire log and click **Submit** yourself. Older Apps Script handoffs without Settings values can still use previously remembered browser selections.
+Demographics does not create or edit a PowerSchool log.
 
-The extension cannot verify which school-specific selections are correct; confirm them on the first log and review each prepared log before submitting. If PowerSchool cannot prepare the log, it stops and shows an error without submitting.
+Version 3.6.2 uses the actual Demographics destination URL, including custom page names, rather than the picker selection. It allows the final Demographics navigation only once per handoff. If PowerSchool redirects somewhere unexpected, the extension clears the pending handoff and displays an error instead of navigating again. You can choose Demographics manually or start a new dialog to retry.
 
-## Open student Demographics
+## SCC and ECC workflow
 
-On **Call Entry**, select the student and choose **Teacher Tools > Open Demographics**. On another tab, select one cell containing a Student Number before choosing the same menu action. The extension opens PowerSchool, switches to Sonoma if needed, searches by student number, and opens the Demographics screen. It does not create, edit, or submit a log.
+1. Choose the appropriate Teacher Tools logging action in the roster.
+2. Click **Open PowerSchool** in the Apps Script dialog.
+3. If PowerSchool requires authentication, sign in. The pending handoff resumes after the authenticated teacher page loads, including SSO flows that finish in a different browser document or tab.
+4. The extension finds the student, opens a new log, applies the supplied Type and Subtype, fills the three configured date fields, selects the applicable Attempt tag, and inserts the note while preserving PowerSchool's template text.
+5. Review every field and click **Submit** manually.
 
-## Temporary settings capture (3.5.0)
+The three supported date fields are **Date & Time**, **Incident Date**, and **Action Date**. Only the date portion is supplied. The extension does not fill the time portion or **Action Taken End Date**.
 
-This build reads Type, Subtype, optional additional dropdown choices, the log-date field, and a tag label from the roster's **Instructions and Settings** tab. The temporary recorder helps obtain exact option values and identify PowerSchool's date control. Captures survive a browser reload.
+If the supplied Type, Subtype, date field, extra dropdown, or tag is missing, ambiguous, or rejected by PowerSchool, the extension stops, preserves the pending work when appropriate, and displays an error. It does not submit the form.
 
-1. Install this branch's files into your unpacked extension folder, reload the extension at `chrome://extensions`, and refresh the PowerSchool tab.
-2. On the PowerSchool **New Log** page, choose the correct Type/Subtype and any other needed dropdowns. Expand **Capture PowerSchool settings (temporary tool)** next to Log Type, choose the matching scenario, then click **Capture selected settings**. The button reads the form and never submits.
-3. Click **Copy Date Field Map** to copy the visible date-field labels and their PowerSchool `id`/`name` attributes. Paste this single diagnostic string into column J (**Notes**) of the next empty **PowerSchool Settings Log** row. It never copies the entered date values, student number, or log note.
-4. With the SCC Attempt Type/Subtype selected, click **Copy Attempt Tag Map**. Paste that diagnostic into column J of another empty row. It recognizes PowerSchool labels such as `Attempt 1 (34)`, records the canonical Attempt number and parenthetical code, and includes options that are currently below the list's scroll position.
-5. Click **Copy Type/Subtype for Settings** and paste into column **B** of that scenario's row in [Instructions and Settings](https://docs.google.com/spreadsheets/d/1_MpkySxTB6BYBB8In3ELRUsH2XpGjaeipMXxxGQb0To/edit#gid=1866668700): SCC Success row 35, SCC Attempt 36, ECC Conversation 37, ECC Attempt 38. This fills B:E. Column F optionally accepts valid extra-dropdown JSON such as `[{"name":"result","value":"no_answer"}]`; H:J contain the three date controls and K contains the Attempt tag map.
-6. Paste the full captured row into the next empty row of the [PowerSchool Settings Log](https://docs.google.com/spreadsheets/d/1_MpkySxTB6BYBB8In3ELRUsH2XpGjaeipMXxxGQb0To/edit#gid=435380773). If copying fails, use **Extension options > Temporary form settings captures > Copy row** or **Copy Settings cells**.
-7. Repeat for all four scenarios when PowerSchool changes its school-specific Type/Subtype values. The verified date controls and Attempt tag map are already populated in the roster.
+## PowerSchool Settings table
 
-The recorder stores up to 20 selected-settings snapshots in extension storage; it does not store student numbers, note text, or arbitrary free-text fields. Version 3.5.0 fills Date & Time, Incident Date, and Action Date, and maps SCC Attempt numbers to PowerSchool's coded Attempt 1–6 options. Review every prepared log before submitting.
+Each Apps Script handoff reads one workflow row from the roster's **Instructions and Settings** table:
 
-The original 2Roster ORN sheet and **6RosterORNFinal** are approved automatically. Version 3.4.0 watches Google Sheets editor frames, including Chrome's inherited `about:blank` editor frames, and polls toast/live regions as a fallback. SCC, ECC, and Demographics handoffs therefore do not depend on one specific Sheets DOM mutation. It keeps the duplicate guard in extension session storage, so repeated frame reports open only one PowerSchool tab when Chrome restarts the background worker. If the encoded toast appears without opening PowerSchool, reload the unpacked extension and refresh the sheet tab. For any other roster, confirm that you approved the correct sheet URL. Updating files on GitHub alone does not update an installed extension.
+| Workflow | Type/Subtype | Dates | Attempt tag |
+|---|---|---|---|
+| SCC Success | SCC success settings | Date & Time, Incident Date, Action Date | None unless configured |
+| SCC Attempt | SCC attempt settings | Date & Time, Incident Date, Action Date | Matching Attempt number |
+| ECC Conversation | ECC conversation settings | Date & Time, Incident Date, Action Date | None unless configured |
+| ECC Attempt | ECC attempt settings | Date & Time, Incident Date, Action Date | Configured tag, if any |
 
-If PowerSchool opens but the log is not prepared, check the visible error before proceeding manually. The browser console also logs messages prefixed `[PowerSchool ECC]` or `[PowerSchool SCC]`. The extension does not click Submit.
+The handoff may also include a small list of configured dropdown name/value pairs. Current settings take effect on the next dialog; reinstalling the extension is not required. Older handoffs without Type/Subtype settings may use SCC fallback selections remembered in extension storage. Those fallback values can be cleared from **Extension details > Extension options**.
+
+## Permissions and privacy
+
+- The content script runs only on `https://californiak12.powerschool.com/teachers/*` and `https://californiak12.powerschool.com/public/*`.
+- The extension has no Google Sheets content-script access, background worker, or tab-opening permission.
+- The only declared permission is `storage`, used for remembered SCC fallback selections and a short-lived sign-in recovery backup.
+- A handoff URL fragment can contain a student number and, for SCC/ECC, the note and settings. The extension removes the fragment from the visible URL immediately. Pending state stays in the PowerSchool tab's session storage, with an extension-storage recovery backup that is accepted for no more than 30 minutes and deleted when authentication completes, the workflow ends, or an expired backup is next checked.
+- The extension does not send roster data to a separate service and does not log the student number or note to the browser console.
+
+## Testing
+
+From the repository root, run:
+
+```bash
+node --test tests/*.test.cjs
+```
+
+The automated tests cover Demographics, SCC, and ECC hash handling; same-tab and cross-document SSO recovery; custom Demographics URLs and stale or absent pickers; multi-document Demographics navigation and unexpected redirects; refresh after completion or failure; Type/Subtype selection; Date & Time, Incident Date, and Action Date; Attempt-tag mapping; note preservation; failure behavior; and the rule that the PowerSchool log is never submitted. The manifest test confirms that no script is injected into `docs.google.com/spreadsheets` and that no background launcher is registered.
+
+These tests use a simulated DOM. They do not prove live Google Sheets behavior, popup-blocker behavior, authenticated PowerSchool end-to-end behavior, or compatibility with the current production PowerSchool DOM. They are not end-to-end tests.
+
+## Manual smoke test
+
+- [ ] Refreshing the Google Sheet opens zero PowerSchool tabs.
+- [ ] **Open Demographics** displays one dialog.
+- [ ] Clicking **Open PowerSchool** opens exactly one tab.
+- [ ] Demographics stays open without repeated navigation, including when its picker shows the previous screen.
+- [ ] Refreshing the completed Demographics tab does not start another search or navigation.
+- [ ] An unexpected redirect after the final Demographics navigation displays a stopped message and does not retry automatically.
+- [ ] Call Entry uses the student selected in the form.
+- [ ] One selected Student Number cell on another tab works.
+- [ ] SCC Success fills Date & Time, Incident Date, and Action Date and uses the correct settings.
+- [ ] SCC Attempt selects the correct Attempt tag.
+- [ ] A signed-out handoff resumes after authentication in the same tab.
+- [ ] Demographics, SCC, and ECC never click **Submit**.
+
+## Troubleshooting
+
+- **The dialog does not appear:** confirm that the Apps Script project is the dialog-handoff version, refresh the Sheet, and retry with a valid student or SCC/ECC selection.
+- **The button does not open a tab:** allow the user-initiated PowerSchool link if the browser blocks it, then click the button again from a newly generated dialog.
+- **PowerSchool opens but does not continue:** reload the unpacked extension and start a fresh handoff. The extension keeps a short-lived recovery backup for SSO redirects.
+- **Demographics keeps reloading:** confirm **3.6.2** is loaded from **dialog-handoff**, disable any older duplicate PowerSchool Helper installations, close the looping tabs, and open a newly generated dialog. This version stops after an unexpected final-navigation redirect; use **Copy error** if that message appears.
+- **A field cannot be selected:** verify the current values in the roster's PowerSchool Settings table and compare them with the live PowerSchool form.
+- **An error panel appears:** continue manually in PowerSchool. The extension stops before submitting anything.
+
+See [CHANGELOG.md](CHANGELOG.md) for version history.
