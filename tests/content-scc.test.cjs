@@ -13,7 +13,8 @@ function fixture({
   kind = 'SCC', stored = {}, sessionStored = {},
   original = 'PowerSchool header', settings, outcome, attemptNumber,
   pathname = '/teachers/log.html', hash,
-  pageOptions = [], pageValue = '', date = '9/18/2026'
+  pageOptions = [], pageValue = '', date = '9/18/2026',
+  authenticatedInitially = false
 } = {}) {
   const elements = new Map();
   const session = new Map(Object.entries(sessionStored));
@@ -22,7 +23,7 @@ function fixture({
   const consoleEntries = [];
   const body = { appendChild(el) { if (el.id) elements.set(el.id, el); } };
   let submits = 0;
-  let authenticated = false;
+  let authenticated = authenticatedInitially;
   let signInObserver = null;
   const makeElement = () => ({
     style: {},
@@ -109,7 +110,10 @@ function fixture({
     },
     chrome: { storage: { local: {
       get: async defaults => ({ ...defaults, ...storage }),
-      set: async values => Object.assign(storage, values)
+      set: async values => Object.assign(storage, values),
+      remove: async keys => {
+        for (const key of Array.isArray(keys) ? keys : [keys]) delete storage[key];
+      }
     } } },
     Event: class { constructor(type) { this.type = type; } },
     MutationObserver: FakeObserver,
@@ -156,8 +160,10 @@ test('saved SCC selections prepare the parent call and preserve template text', 
 
 test('handoff survives the public sign-in page and resumes after login', async () => {
   const login = fixture({ pathname: '/public/home.html' });
+  await waitFor(() => login.button);
   const pending = login.session.get('ps_ecc_workflow_payload_v1');
   assert.ok(pending);
+  assert.ok(login.storage.ps_pending_handoff_v1);
   assert.match(login.button.textContent, /handoff saved.*sign in/i);
 
   const resumed = fixture({
@@ -173,8 +179,51 @@ test('handoff survives the public sign-in page and resumes after login', async (
   assert.equal(resumed.session.has('ps_ecc_workflow_payload_v1'), false);
 });
 
+test('handoff resumes after SSO loses tab sessionStorage', async () => {
+  const pending = {
+    kind: 'DEMOGRAPHICS', requestId: 'request-123', studentNumber: '12345678',
+    date: '', note: '', outcome: '', attemptNumber: null, settings: null,
+    stepCount: 0, startedAt: Date.now()
+  };
+  const env = fixture({
+    hash: '',
+    pathname: '/teachers/home.html',
+    authenticatedInitially: true,
+    stored: {
+      ps_pending_handoff_v1: { savedAt: Date.now(), state: pending }
+    }
+  });
+  await waitFor(() => env.submits === 1);
+  assert.ok(env.session.has('ps_ecc_workflow_payload_v1'));
+  assert.equal('ps_pending_handoff_v1' in env.storage, false);
+});
+
+test('expired SSO recovery backup is discarded', async () => {
+  const pending = {
+    kind: 'DEMOGRAPHICS', requestId: 'request-123', studentNumber: '12345678',
+    date: '', note: '', outcome: '', attemptNumber: null, settings: null,
+    stepCount: 0, startedAt: Date.now() - (31 * 60 * 1000)
+  };
+  const env = fixture({
+    hash: '',
+    pathname: '/teachers/home.html',
+    authenticatedInitially: true,
+    stored: {
+      ps_pending_handoff_v1: {
+        savedAt: Date.now() - (31 * 60 * 1000),
+        state: pending
+      }
+    }
+  });
+  await new Promise(resolve => setTimeout(resolve, 25));
+  assert.equal(env.submits, 0);
+  assert.equal(env.session.has('ps_ecc_workflow_payload_v1'), false);
+  assert.equal('ps_pending_handoff_v1' in env.storage, false);
+});
+
 test('teacher login page keeps the handoff pending until sign-in completes', async () => {
   const env = fixture({ pathname: '/teachers/home.html' });
+  await waitFor(() => env.button);
   assert.ok(env.session.get('ps_ecc_workflow_payload_v1'));
   assert.match(env.button.textContent, /sign in.*continue automatically/i);
   assert.equal(env.submits, 0);
@@ -288,4 +337,22 @@ test('demographics handoff finishes without opening or editing a log', async () 
   assert.equal(env.session.has('ps_ecc_workflow_payload_v1'), false);
   assert.equal(env.noteBox.value, 'PowerSchool header');
   assert.equal(env.submits, 0);
+});
+
+test('demographics route finishes even when the screen picker reports another page', async () => {
+  const demographicsUrl = '/teachers/studentpages/demographics.html?frn=123';
+  const env = fixture({
+    kind: 'DEMOGRAPHICS',
+    pathname: '/teachers/studentpages/demographics.html',
+    pageOptions: [
+      ['/teachers/studentpages/contacts.html?frn=123', 'Contacts'],
+      [demographicsUrl, 'Demographics']
+    ],
+    pageValue: '/teachers/studentpages/contacts.html?frn=123'
+  });
+  await waitFor(() =>
+    env.button?.textContent === 'Demographics open — review student information'
+  );
+  assert.equal(env.assignments.length, 0);
+  assert.equal(env.session.has('ps_ecc_workflow_payload_v1'), false);
 });

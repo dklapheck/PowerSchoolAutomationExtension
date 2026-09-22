@@ -25,6 +25,8 @@
   const OR010_BUTTON_ID = 'ps-or010-homeroom-button';
 
   const ECC_STORAGE_KEY = 'ps_ecc_workflow_payload_v1';
+  const PENDING_HANDOFF_STORAGE_KEY = 'ps_pending_handoff_v1';
+  const PENDING_HANDOFF_MAX_AGE_MS = 30 * 60 * 1000;
   const ECC_BUTTON_ID = 'ps-ecc-status-button';
   const ECC_MAX_STEPS = 12;
   const SCC_TYPE_KEY = 'sccLogTypeValue';
@@ -487,6 +489,7 @@
 
       const state = {
         kind,
+        requestId: String(payload.requestId || '').trim(),
         studentNumber,
         date,
         note,
@@ -553,8 +556,43 @@
     );
   }
 
+  function persistPendingHandoff_(state) {
+    return chrome.storage.local.set({
+      [PENDING_HANDOFF_STORAGE_KEY]: {
+        savedAt: Date.now(),
+        state: state
+      }
+    }).catch(() => {
+      // sessionStorage remains the same-tab fallback.
+    });
+  }
+
+  async function restorePendingHandoff_() {
+    try {
+      const stored = await chrome.storage.local.get({
+        [PENDING_HANDOFF_STORAGE_KEY]: null
+      });
+      const record = stored[PENDING_HANDOFF_STORAGE_KEY];
+      const state = record && record.state;
+      const age = Date.now() - Number(record?.savedAt || 0);
+      if (!state || age < 0 || age > PENDING_HANDOFF_MAX_AGE_MS ||
+          !/^\d+$/.test(String(state.studentNumber || '')) ||
+          !['DEMOGRAPHICS', 'SCC', 'ECC'].includes(state.kind)) {
+        if (record) await chrome.storage.local.remove(PENDING_HANDOFF_STORAGE_KEY);
+        return null;
+      }
+      sessionStorage.setItem(ECC_STORAGE_KEY, JSON.stringify(state));
+      // Claim this backup so another post-login tab cannot replay it.
+      await chrome.storage.local.remove(PENDING_HANDOFF_STORAGE_KEY);
+      return state;
+    } catch (_) {
+      return null;
+    }
+  }
+
   function clearECCState() {
     sessionStorage.removeItem(ECC_STORAGE_KEY);
+    chrome.storage.local.remove(PENDING_HANDOFF_STORAGE_KEY).catch(() => {});
   }
 
   function getWorkflowLabel(kind) {
@@ -777,7 +815,9 @@
     const selected = screenPicker.selectedOptions?.[0] ||
       screenPicker.options[screenPicker.selectedIndex];
     return {
-      isCurrent: selected === option ||
+      isCurrent: location.pathname.toLowerCase()
+        .endsWith('/teachers/studentpages/demographics.html') ||
+        selected === option ||
         normalize(selected?.textContent).toLowerCase() === 'demographics',
       url: option.value || ''
     };
@@ -1230,6 +1270,10 @@
       return;
     }
 
+    // Authentication is complete. Same-origin PowerSchool navigation keeps
+    // sessionStorage, so the cross-tab SSO backup is no longer needed.
+    chrome.storage.local.remove(PENDING_HANDOFF_STORAGE_KEY).catch(() => {});
+
     state.stepCount = Number(state.stepCount || 0) + 1;
     saveECCState(state);
 
@@ -1461,23 +1505,32 @@
     }
   }
 
-  importPowerSchoolPayloadFromHash();
+  async function startPowerSchoolHandoff_() {
+    const imported = importPowerSchoolPayloadFromHash();
+    if (imported) await persistPendingHandoff_(imported);
 
-  // PowerSchool may redirect an unauthenticated teacher request to /public/.
-  // Capture the hash there before the login form removes it. The same tab's
-  // sessionStorage survives the sign-in round trip back to /teachers/.
-  if (!isTeacherPage) {
-    const pending = loadECCState();
-    if (pending) {
-      const kind = getWorkflowLabel(pending.kind || 'ECC');
-      setECCButton(
-        kind + ' handoff saved — sign in to continue'
-      );
+    // Some SSO flows finish in a different tab or browser document, which
+    // loses sessionStorage. Restore the most recent short-lived handoff from
+    // extension storage and remove that backup as soon as it is claimed.
+    const pending = loadECCState() || await restorePendingHandoff_();
+
+    if (!isTeacherPage) {
+      if (pending) {
+        const kind = getWorkflowLabel(pending.kind || 'ECC');
+        setECCButton(
+          kind + ' handoff saved — sign in to continue'
+        );
+      }
+      return;
     }
-    return;
+
+    if (pending) continueECCWorkflow();
   }
 
-  if (loadECCState()) {
-    continueECCWorkflow();
-  }
+  startPowerSchoolHandoff_().catch(() => {
+    showPersistentError(
+      'PowerSchool handoff could not start',
+      'Reload this PowerSchool tab and try the Teacher Tools action again.'
+    );
+  });
 })();

@@ -26,7 +26,7 @@ Demographics does not create or edit a PowerSchool log.
 
 1. Choose the appropriate Teacher Tools logging action in the roster.
 2. Click **Open PowerSchool** in the Apps Script dialog.
-3. If PowerSchool requires authentication, sign in in that same tab. The pending handoff remains in session storage and resumes after the authenticated teacher page loads.
+3. If PowerSchool requires authentication, sign in. The pending handoff resumes after the authenticated teacher page loads, including SSO flows that finish in a different browser document or tab.
 4. The extension finds the student, opens a new log, applies the supplied Type and Subtype, fills the three configured date fields, selects the applicable Attempt tag, and inserts the note while preserving PowerSchool's template text.
 5. Review every field and click **Submit** manually.
 
@@ -51,8 +51,8 @@ The handoff may also include a small list of configured dropdown name/value pair
 
 - The content script runs only on `https://californiak12.powerschool.com/teachers/*` and `https://californiak12.powerschool.com/public/*`.
 - The extension has no Google Sheets content-script access, background worker, or tab-opening permission.
-- The only declared permission is `storage`, used for remembered SCC fallback selections.
-- A handoff URL fragment can contain a student number and, for SCC/ECC, the note and settings. The extension removes the fragment from the visible URL immediately and keeps pending workflow state in that PowerSchool tab's session storage so sign-in can resume.
+- The only declared permission is `storage`, used for remembered SCC fallback selections and a short-lived sign-in recovery backup.
+- A handoff URL fragment can contain a student number and, for SCC/ECC, the note and settings. The extension removes the fragment from the visible URL immediately. Pending state stays in the PowerSchool tab's session storage, with an extension-storage recovery backup that is accepted for no more than 30 minutes and deleted when authentication completes, the workflow ends, or an expired backup is next checked.
 - The extension does not send roster data to a separate service and does not log the student number or note to the browser console.
 
 ## Testing
@@ -63,7 +63,7 @@ From the repository root, run:
 node --test tests/*.test.cjs
 ```
 
-The automated tests cover Demographics, SCC, and ECC hash handling; signed-out recovery; student navigation; Type/Subtype selection; Date & Time, Incident Date, and Action Date; Attempt-tag mapping; note preservation; failure behavior; and the rule that the PowerSchool log is never submitted. The manifest test confirms that no script is injected into `docs.google.com/spreadsheets` and that no background launcher is registered.
+The automated tests cover Demographics, SCC, and ECC hash handling; same-tab and cross-document SSO recovery; Demographics reload-loop prevention; student navigation; Type/Subtype selection; Date & Time, Incident Date, and Action Date; Attempt-tag mapping; note preservation; failure behavior; and the rule that the PowerSchool log is never submitted. The manifest test confirms that no script is injected into `docs.google.com/spreadsheets` and that no background launcher is registered.
 
 These tests use a simulated DOM. They do not prove live Google Sheets behavior, popup-blocker behavior, authenticated PowerSchool end-to-end behavior, or compatibility with the current production PowerSchool DOM. They are not end-to-end tests.
 
@@ -83,7 +83,7 @@ These tests use a simulated DOM. They do not prove live Google Sheets behavior, 
 
 - **The dialog does not appear:** confirm that the Apps Script project is the dialog-handoff version, refresh the Sheet, and retry with a valid student or SCC/ECC selection.
 - **The button does not open a tab:** allow the user-initiated PowerSchool link if the browser blocks it, then click the button again from a newly generated dialog.
-- **PowerSchool opens but does not continue:** reload the unpacked extension and refresh the PowerSchool tab. Complete sign-in in the same tab if prompted.
+- **PowerSchool opens but does not continue:** reload the unpacked extension and refresh the PowerSchool tab, then start a fresh handoff. Version 3.6.1 keeps a short-lived recovery backup for SSO redirects.
 - **A field cannot be selected:** verify the current values in the roster's PowerSchool Settings table and compare them with the live PowerSchool form.
 - **An error panel appears:** continue manually in PowerSchool. The extension stops before submitting anything.
 

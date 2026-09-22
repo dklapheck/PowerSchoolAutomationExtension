@@ -2,7 +2,12 @@
 
 Repository history and prior documentation are the source for the entries below.
 
-## 3.6.0 — Unreleased
+## 3.6.1 — Unreleased
+
+- Restored pending handoffs after SSO when the authenticated page loses the original tab's session storage.
+- Prevented Demographics from repeatedly navigating to the page that is already open when PowerSchool's screen picker reports stale selection state.
+
+## 3.6.0 — 2026-09-22
 
 - Replaced Google Sheets toast/DOM handoff detection with an explicit Apps Script dialog link.
 - Removed Google Sheets content-script access, frame/polling logic, background tab launching, approved-sheet storage, and their obsolete tests.
