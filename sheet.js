@@ -21,27 +21,12 @@
       hash: 'demographics='
     }
   ];
-  // Trusted roster workbooks remain approved by default. Teachers may add
-  // other roster IDs through the extension options page.
-  const DEFAULT_APPROVED_ROSTER_IDS = new Set([
-    '1wJwz78LkACmNGxrrU6w6zOXy2zBZFeFElWg5PiCbm6g',
-    '1_MpkySxTB6BYBB8In3ELRUsH2XpGjaeipMXxxGQb0To'
-  ]);
+  // The previously supported sheet remains approved by default.
+  const LEGACY_ROSTER_ID = '1wJwz78LkACmNGxrrU6w6zOXy2zBZFeFElWg5PiCbm6g';
   const POWERSCHOOL_BASE =
     'https://californiak12.powerschool.com/teachers/home.html#';
   const STATUS_ID = 'ecc-helper-status';
-  // Sheets keeps handoff toasts visible for about 10 seconds. Keep the
-  // per-frame guard longer so polling cannot rediscover the same handoff.
-  const HANDOFF_DEDUPE_MS = 15000;
-  const ELEMENT_NODE = 1;
-  const TEXT_NODE = 3;
-  const SHOW_TEXT = 4;
-  const TOAST_SELECTORS = [
-    '.docs-toast-msg',
-    '[role="alert"]',
-    '[aria-live="assertive"]',
-    '[aria-live="polite"]'
-  ];
+  const HANDOFF_DEDUPE_MS = 1500;
   let lastHandoffKey = '';
   let lastHandoffAt = 0;
 
@@ -83,16 +68,15 @@
   }
 
   function replaceVisibleMarker(node) {
-    if (!node || typeof node.nodeType !== 'number') return;
-    const handoff = extractHandoff(node.nodeType === TEXT_NODE
+    const handoff = extractHandoff(node.nodeType === Node.TEXT_NODE
       ? node.nodeValue : node.textContent);
     if (!handoff) return;
     const friendly = 'Opening PowerSchool ' + handoff.kind + ' log…';
-    if (node.nodeType === TEXT_NODE) {
+    if (node.nodeType === Node.TEXT_NODE) {
       if (String(node.nodeValue || '').includes(handoff.prefix)) {
         node.nodeValue = friendly;
       }
-    } else if (node.nodeType === ELEMENT_NODE &&
+    } else if (node instanceof HTMLElement &&
         node.childElementCount === 0 &&
         String(node.textContent || '').includes(handoff.prefix)) {
       node.textContent = friendly;
@@ -100,8 +84,7 @@
   }
 
   function handleCandidate(node) {
-    if (!node || typeof node.nodeType !== 'number') return;
-    const value = node.nodeType === TEXT_NODE
+    const value = node.nodeType === Node.TEXT_NODE
       ? node.nodeValue
       : node.textContent;
     // Avoid scanning the entire spreadsheet DOM as one string.
@@ -114,9 +97,9 @@
     if (handoffKey === lastHandoffKey &&
         now - lastHandoffAt < HANDOFF_DEDUPE_MS) return;
 
-    // A Sheets toast can be reported through several nested DOM mutations
-    // and repeated polling passes. Suppress it for the toast's visible life,
-    // then allow the teacher to retry the exact same handoff.
+    // A Sheets toast can be reported through several nested DOM mutations.
+    // Suppress that brief burst, but allow the teacher to retry the exact
+    // same handoff after the toast is shown again.
     lastHandoffKey = handoffKey;
     lastHandoffAt = now;
     replaceVisibleMarker(node);
@@ -136,18 +119,18 @@
 
   function scanNode(node) {
     if (!node) return;
-    if (node.nodeType === TEXT_NODE) {
+    if (node.nodeType === Node.TEXT_NODE) {
       handleCandidate(node);
       // Sheets may split a toast marker between sibling text nodes.
       if (node.parentElement) handleCandidate(node.parentElement);
       return;
     }
-    if (node.nodeType !== ELEMENT_NODE || node.id === STATUS_ID) return;
+    if (node.nodeType !== Node.ELEMENT_NODE || node.id === STATUS_ID) return;
 
     // Read the whole small toast as well as its text nodes. A single
     // marker can be split across nested spans in the Sheets interface.
     handleCandidate(node);
-    const walker = document.createTreeWalker(node, SHOW_TEXT);
+    const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
     let current;
     while ((current = walker.nextNode())) handleCandidate(current);
   }
@@ -169,44 +152,14 @@
       subtree: true,
       characterData: true
     });
-    scanNode(document.body);
-
-    // Google Sheets sometimes renders its toast inside an existing live
-    // region or editor frame, which produces no useful added-node mutation
-    // in the top page. Poll only the small known toast/live regions as a
-    // fallback; background.js deduplicates messages reported by two frames.
-    const scanToastRegions = () => {
-      if (typeof document.querySelectorAll !== 'function') return;
-      for (const selector of TOAST_SELECTORS) {
-        for (const node of document.querySelectorAll(selector)) scanNode(node);
-      }
-    };
-    scanToastRegions();
-    if (typeof setInterval === 'function') setInterval(scanToastRegions, 250);
+    // Only react to markers that appear after the watcher starts. Scanning
+    // existing page text here can replay a prior handoff when Sheets reloads.
   }
 
-  function extractSpreadsheetId(value) {
-    const match = String(value || '').match(
-      /\/spreadsheets\/(?:u\/\d+\/)?d\/([A-Za-z0-9_-]+)(?:\/|$)/
-    );
-    return match ? match[1] : '';
-  }
-
-  function getSpreadsheetId() {
-    const candidates = [location.href, location.pathname, document.referrer];
-    // Chrome commonly places the Sheets toast in an inherited about:blank
-    // editor frame. That frame has no spreadsheet path of its own.
-    try { candidates.push(top.location.href); } catch (_) {}
-    try { candidates.push(parent.location.href); } catch (_) {}
-    for (const candidate of candidates) {
-      const id = extractSpreadsheetId(candidate);
-      if (id) return id;
-    }
-    return '';
-  }
-
-  const spreadsheetId = getSpreadsheetId();
-  if (!spreadsheetId) return;
+  const match = location.pathname.match(
+    /^\/spreadsheets\/(?:u\/\d+\/)?d\/([A-Za-z0-9_-]+)(?:\/|$)/
+  );
+  if (!match) return;
   chrome.storage.local.get({ eccApprovedSpreadsheetIds: [] }, settings => {
     if (chrome.runtime.lastError) {
       console.error('[ECC Helper] Could not read approved sheets.',
@@ -215,7 +168,7 @@
     }
     const approved = Array.isArray(settings.eccApprovedSpreadsheetIds)
       ? settings.eccApprovedSpreadsheetIds : [];
-    if (DEFAULT_APPROVED_ROSTER_IDS.has(spreadsheetId) || approved.includes(spreadsheetId)) {
+    if (match[1] === LEGACY_ROSTER_ID || approved.includes(match[1])) {
       startWatching();
     }
   });
