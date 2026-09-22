@@ -12,7 +12,7 @@ const NOTE = 'On 9/18/2026, spoke with parent.';
 function fixture({
   kind = 'SCC', stored = {}, sessionStored = {},
   original = 'PowerSchool header', settings, outcome, attemptNumber,
-  pathname = '/teachers/log.html', hash,
+  pathname = '/teachers/log.html', search = '', hash,
   pageOptions = [], pageValue = '', date = '9/18/2026',
   authenticatedInitially = false
 } = {}) {
@@ -48,7 +48,7 @@ function fixture({
   }
   const logType = makeSelect([['', 'Choose Type'], ['1187', 'Student Contact'], ['SCC_TYPE', 'Student Connection Call']]);
   const subtype = makeSelect([['', 'Choose Subtype'], ['GE:ECC', 'ECC'], ['SCC_PARENT', 'Parent Connection Call']]);
-  const pagePicker = makeSelect(pageOptions);
+  const pagePicker = makeSelect(pageOptions || []);
   pagePicker.value = pageValue;
   const tagSelect = makeSelect([
     ['', 'Choose Tag'], ['attempt_1', 'Attempt 1 (34)'], ['attempt_2', 'Attempt 2 (35)']
@@ -80,7 +80,7 @@ function fixture({
         ? schoolPicker : elements.get(id) ?? null,
     querySelector: selector => selector === 'select[name="subtype"]'
       ? subtype : selector === 'textarea[name="UF-008009-1"]' ? noteBox
-        : selector === 'select[name="page"]' ? pagePicker : null,
+        : selector === 'select[name="page"]' && pageOptions !== null ? pagePicker : null,
     querySelectorAll: selector => selector === 'input, select'
       ? [logType, subtype, pagePicker, tagSelect, dateInput, incidentDate, actionDate]
       : selector === 'select' ? [logType, subtype, pagePicker, tagSelect]
@@ -92,17 +92,19 @@ function fixture({
   })).toString('base64url');
   const locationHash = typeof hash === 'string'
     ? hash : '#' + kind.toLowerCase() + '=' + encoded;
+  const browserLocation = new URL(pathname + search + locationHash,
+    'https://californiak12.powerschool.com');
+  browserLocation.assign = url => assignments.push(url);
   class FakeObserver {
     constructor(callback) { this.callback = callback; signInObserver = this; }
     observe() {}
     disconnect() {}
   }
   const context = vm.createContext({
-    document, location: {
-      pathname, search: '', hash: locationHash,
-      assign: url => assignments.push(url)
-    },
-    history: { replaceState() {} },
+    document, location: browserLocation,
+    history: { replaceState(_state, _title, url) {
+      browserLocation.href = new URL(url, browserLocation.href).href;
+    } },
     sessionStorage: {
       getItem: key => session.get(key) ?? null,
       setItem: (key, value) => session.set(key, String(value)),
@@ -117,7 +119,7 @@ function fixture({
     } } },
     Event: class { constructor(type) { this.type = type; } },
     MutationObserver: FakeObserver,
-    TextDecoder, Uint8Array, atob, setInterval, clearInterval, setTimeout,
+    URL, TextDecoder, Uint8Array, atob, setInterval, clearInterval, setTimeout,
     console: {
       log: (...args) => consoleEntries.push(args),
       error: (...args) => consoleEntries.push(args)
@@ -356,3 +358,105 @@ test('demographics route finishes even when the screen picker reports another pa
   assert.equal(env.assignments.length, 0);
   assert.equal(env.session.has('ps_ecc_workflow_payload_v1'), false);
 });
+
+const WORKFLOW_KEY = 'ps_ecc_workflow_payload_v1';
+const READY_DEMOGRAPHICS = 'Demographics open — review student information';
+const CONTACTS_URL = '/teachers/studentpages/contacts.html?frn=123';
+const CUSTOM_DEMOGRAPHICS_URL = '/teachers/studentpages/custom_student_info.html?frn=123&sectionid=456';
+const SCREEN_OPTIONS = [[CONTACTS_URL, 'Contacts'], [CUSTOM_DEMOGRAPHICS_URL, 'Demographics']];
+
+test('custom Demographics URL is recognized with a stale picker and reordered query', async () => {
+  const env = fixture({
+    kind: 'DEMOGRAPHICS',
+    pathname: '/teachers/studentpages/custom_student_info.html',
+    search: '?sectionid=456&frn=123',
+    pageOptions: [[CONTACTS_URL, 'Contacts'],
+      ['custom_student_info.html?frn=123&sectionid=456#details', 'Demographics']],
+    pageValue: CONTACTS_URL
+  });
+  await waitFor(() => env.button?.textContent === READY_DEMOGRAPHICS);
+  assert.deepEqual(env.assignments, []);
+  assert.equal(env.session.has(WORKFLOW_KEY), false);
+  assert.equal(env.submits, 0);
+});
+
+test('standard Demographics page finishes without a screen picker', async () => {
+  const env = fixture({
+    kind: 'DEMOGRAPHICS', pathname: '/teachers/studentpages/demographics.html',
+    pageOptions: null
+  });
+  await waitFor(() => env.button?.textContent === READY_DEMOGRAPHICS);
+  assert.deepEqual(env.assignments, []);
+  assert.equal(env.session.has(WORKFLOW_KEY), false);
+});
+
+test('a stale Demographics selection on Contacts does not falsely report success', async () => {
+  const env = fixture({
+    kind: 'DEMOGRAPHICS', pathname: '/teachers/studentpages/contacts.html',
+    search: '?frn=123', pageOptions: SCREEN_OPTIONS, pageValue: CUSTOM_DEMOGRAPHICS_URL
+  });
+  await waitFor(() => env.assignments.length === 1);
+  assert.notEqual(env.button?.textContent, READY_DEMOGRAPHICS);
+});
+
+test('Demographics navigation completes across documents and refresh does not restart it', async () => {
+  const first = fixture({
+    kind: 'DEMOGRAPHICS', pathname: '/teachers/studentpages/contacts.html',
+    search: '?frn=123', pageOptions: SCREEN_OPTIONS, pageValue: CONTACTS_URL
+  });
+  await waitFor(() => first.assignments.length === 1);
+  const arrived = fixture({
+    hash: '', pathname: '/teachers/studentpages/custom_student_info.html',
+    search: '?frn=123&sectionid=456', pageOptions: null,
+    sessionStored: Object.fromEntries(first.session), stored: first.storage
+  });
+  await waitFor(() => arrived.button?.textContent === READY_DEMOGRAPHICS);
+  assert.deepEqual(arrived.assignments, []);
+  assert.equal(arrived.session.has(WORKFLOW_KEY), false);
+  assert.equal('ps_pending_handoff_v1' in arrived.storage, false);
+  assert.equal(arrived.noteBox.value, 'PowerSchool header');
+  assert.equal(arrived.submits, 0);
+
+  const refreshed = fixture({
+    hash: '', pathname: '/teachers/studentpages/custom_student_info.html',
+    search: '?frn=123&sectionid=456', pageOptions: SCREEN_OPTIONS, pageValue: CONTACTS_URL,
+    sessionStored: Object.fromEntries(arrived.session), stored: arrived.storage
+  });
+  await new Promise(resolve => setTimeout(resolve, 50));
+  assert.deepEqual(refreshed.assignments, []);
+  assert.equal(refreshed.submits, 0);
+  assert.equal(refreshed.button, undefined);
+});
+
+for (const destination of ['contacts', 'home', 'wrong-student']) {
+  test('Demographics redirect to ' + destination + ' stops instead of navigating again', async () => {
+    const first = fixture({
+      kind: 'DEMOGRAPHICS', pathname: '/teachers/studentpages/contacts.html',
+      search: '?frn=123', pageOptions: SCREEN_OPTIONS, pageValue: CONTACTS_URL
+    });
+    await waitFor(() => first.assignments.length === 1);
+    const returned = fixture({
+      hash: '',
+      pathname: destination === 'home' ? '/teachers/home.html'
+        : destination === 'wrong-student' ? '/teachers/studentpages/custom_student_info.html'
+          : '/teachers/studentpages/contacts.html',
+      search: destination === 'wrong-student' ? '?frn=999&sectionid=456' : '?frn=123',
+      authenticatedInitially: true, pageOptions: SCREEN_OPTIONS, pageValue: CONTACTS_URL,
+      sessionStored: Object.fromEntries(first.session), stored: first.storage
+    });
+    await waitFor(() => returned.button?.textContent === 'Demographics automation stopped');
+    assert.deepEqual(returned.assignments, []);
+    assert.equal(returned.submits, 0);
+    assert.equal(returned.session.has(WORKFLOW_KEY), false);
+    assert.equal('ps_pending_handoff_v1' in returned.storage, false);
+    assert.match(returned.session.get('ps_helper_last_error_v1'), /reload loop/i);
+
+    const refreshed = fixture({
+      hash: '', pathname: '/teachers/home.html', authenticatedInitially: true,
+      sessionStored: Object.fromEntries(returned.session), stored: returned.storage
+    });
+    await new Promise(resolve => setTimeout(resolve, 50));
+    assert.deepEqual(refreshed.assignments, []);
+    assert.equal(refreshed.submits, 0);
+  });
+}

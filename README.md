@@ -6,12 +6,12 @@ Google Sheets is not in the extension manifest. The roster's Apps Script display
 
 ## Installation and updating
 
-1. Download or clone this repository.
+1. Download or clone version **3.6.2** from the **dialog-handoff** branch.
 2. Open `chrome://extensions` or `edge://extensions`.
 3. Turn on **Developer mode**.
 4. Choose **Load unpacked** and select this repository folder.
 
-To update an existing unpacked installation, replace its files with the new repository version, return to the extensions page, and click **Reload**. Refresh any PowerSchool tabs that were already open. Updating GitHub alone does not update an installed unpacked extension.
+To update an existing unpacked installation, replace its files with the new repository version, return to the extensions page, and click **Reload**. Confirm the extension shows **3.6.2**. Close any looping PowerSchool tabs and start a fresh handoff from a newly generated roster dialog. If multiple copies of PowerSchool Helper are installed, disable the older copies. Updating GitHub alone does not update an installed unpacked extension.
 
 ## Demographics workflow
 
@@ -21,6 +21,8 @@ To update an existing unpacked installation, replace its files with the new repo
 4. The extension switches to the required school when necessary, searches for the student, and opens Demographics.
 
 Demographics does not create or edit a PowerSchool log.
+
+Version 3.6.2 uses the actual Demographics destination URL, including custom page names, rather than the picker selection. It allows the final Demographics navigation only once per handoff. If PowerSchool redirects somewhere unexpected, the extension clears the pending handoff and displays an error instead of navigating again. You can choose Demographics manually or start a new dialog to retry.
 
 ## SCC and ECC workflow
 
@@ -63,7 +65,7 @@ From the repository root, run:
 node --test tests/*.test.cjs
 ```
 
-The automated tests cover Demographics, SCC, and ECC hash handling; same-tab and cross-document SSO recovery; Demographics reload-loop prevention; student navigation; Type/Subtype selection; Date & Time, Incident Date, and Action Date; Attempt-tag mapping; note preservation; failure behavior; and the rule that the PowerSchool log is never submitted. The manifest test confirms that no script is injected into `docs.google.com/spreadsheets` and that no background launcher is registered.
+The automated tests cover Demographics, SCC, and ECC hash handling; same-tab and cross-document SSO recovery; custom Demographics URLs and stale or absent pickers; multi-document Demographics navigation and unexpected redirects; refresh after completion or failure; Type/Subtype selection; Date & Time, Incident Date, and Action Date; Attempt-tag mapping; note preservation; failure behavior; and the rule that the PowerSchool log is never submitted. The manifest test confirms that no script is injected into `docs.google.com/spreadsheets` and that no background launcher is registered.
 
 These tests use a simulated DOM. They do not prove live Google Sheets behavior, popup-blocker behavior, authenticated PowerSchool end-to-end behavior, or compatibility with the current production PowerSchool DOM. They are not end-to-end tests.
 
@@ -72,6 +74,9 @@ These tests use a simulated DOM. They do not prove live Google Sheets behavior, 
 - [ ] Refreshing the Google Sheet opens zero PowerSchool tabs.
 - [ ] **Open Demographics** displays one dialog.
 - [ ] Clicking **Open PowerSchool** opens exactly one tab.
+- [ ] Demographics stays open without repeated navigation, including when its picker shows the previous screen.
+- [ ] Refreshing the completed Demographics tab does not start another search or navigation.
+- [ ] An unexpected redirect after the final Demographics navigation displays a stopped message and does not retry automatically.
 - [ ] Call Entry uses the student selected in the form.
 - [ ] One selected Student Number cell on another tab works.
 - [ ] SCC Success fills Date & Time, Incident Date, and Action Date and uses the correct settings.
@@ -83,7 +88,8 @@ These tests use a simulated DOM. They do not prove live Google Sheets behavior, 
 
 - **The dialog does not appear:** confirm that the Apps Script project is the dialog-handoff version, refresh the Sheet, and retry with a valid student or SCC/ECC selection.
 - **The button does not open a tab:** allow the user-initiated PowerSchool link if the browser blocks it, then click the button again from a newly generated dialog.
-- **PowerSchool opens but does not continue:** reload the unpacked extension and refresh the PowerSchool tab, then start a fresh handoff. Version 3.6.1 keeps a short-lived recovery backup for SSO redirects.
+- **PowerSchool opens but does not continue:** reload the unpacked extension and start a fresh handoff. The extension keeps a short-lived recovery backup for SSO redirects.
+- **Demographics keeps reloading:** confirm **3.6.2** is loaded from **dialog-handoff**, disable any older duplicate PowerSchool Helper installations, close the looping tabs, and open a newly generated dialog. This version stops after an unexpected final-navigation redirect; use **Copy error** if that message appears.
 - **A field cannot be selected:** verify the current values in the roster's PowerSchool Settings table and compare them with the live PowerSchool form.
 - **An error panel appears:** continue manually in PowerSchool. The extension stops before submitting anything.
 

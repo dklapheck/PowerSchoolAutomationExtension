@@ -2,7 +2,15 @@
 
 Repository history and prior documentation are the source for the entries below.
 
-## 3.6.1 — Unreleased
+## 3.6.2 — 2026-09-22
+
+- Recognize custom Demographics destinations using the actual screen link, with relative-URL resolution and normalized query ordering. Do not trust a stale dropdown selection.
+- Recognize the standard Demographics page even when its screen picker is absent.
+- Persist the final Demographics navigation attempt before leaving the document. After arrival, complete the handoff or stop with an explanation; never repeat that navigation or restart the search after an unexpected redirect.
+- Wait for the sign-in recovery backup to be cleared before authenticated navigation.
+- Added regression tests for custom URLs, stale selections, missing pickers, multi-document arrival, redirects to Contacts/Home/a different student, and refresh after completion or failure.
+
+## 3.6.1 — 2026-09-22
 
 - Restored pending handoffs after SSO when the authenticated page loses the original tab's session storage.
 - Prevented Demographics from repeatedly navigating to the page that is already open when PowerSchool's screen picker reports stale selection state.

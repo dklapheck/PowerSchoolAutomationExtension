@@ -799,7 +799,29 @@
     return logOption?.value || null;
   }
 
+  function isSamePowerSchoolScreen(url) {
+    try {
+      const target = new URL(url, location.href);
+      const current = new URL(location.href);
+      // Resolve relative links against this document, ignore fragments, and
+      // normalize query ordering. Keep query values (especially frn) intact.
+      target.searchParams.sort();
+      current.searchParams.sort();
+      return target.origin === current.origin &&
+        target.pathname.toLowerCase() === current.pathname.toLowerCase() &&
+        target.search === current.search;
+    } catch (_) {
+      return false;
+    }
+  }
+
   function getDemographicsScreen() {
+    // This page can be rendered without the navigation picker.
+    if (location.pathname.toLowerCase()
+      .endsWith('/teachers/studentpages/demographics.html')) {
+      return { isCurrent: true, url: '' };
+    }
+
     const screenPicker = document.querySelector(
       'select[name="page"]'
     );
@@ -812,15 +834,17 @@
     );
     if (!option) return null;
 
-    const selected = screenPicker.selectedOptions?.[0] ||
-      screenPicker.options[screenPicker.selectedIndex];
+    // PowerSchool can keep the previous selection on both Contacts and
+    // Demographics. The option's destination is authoritative, not selection.
     return {
-      isCurrent: location.pathname.toLowerCase()
-        .endsWith('/teachers/studentpages/demographics.html') ||
-        selected === option ||
-        normalize(selected?.textContent).toLowerCase() === 'demographics',
+      isCurrent: !!option.value && isSamePowerSchoolScreen(option.value),
       url: option.value || ''
     };
+  }
+
+  function finishDemographics() {
+    clearECCState();
+    setECCButton('Demographics open — review student information', 'ready');
   }
 
   // ============================================================
@@ -1272,7 +1296,7 @@
 
     // Authentication is complete. Same-origin PowerSchool navigation keeps
     // sessionStorage, so the cross-tab SSO backup is no longer needed.
-    chrome.storage.local.remove(PENDING_HANDOFF_STORAGE_KEY).catch(() => {});
+    await chrome.storage.local.remove(PENDING_HANDOFF_STORAGE_KEY).catch(() => {});
 
     state.stepCount = Number(state.stepCount || 0) + 1;
     saveECCState(state);
@@ -1287,6 +1311,25 @@
         path: location.pathname,
         step: state.stepCount
       });
+
+      // The final Demographics navigation is allowed once per handoff. This
+      // marker survives document loads, including redirects back to Home or
+      // Contacts. Never restart the search or reassign the destination here.
+      if (kind === 'DEMOGRAPHICS' && state.demographicsNavigationUrl) {
+        const target = new URL(state.demographicsNavigationUrl);
+        const current = new URL(location.href);
+        const sameStudent = !target.searchParams.has('frn') ||
+          target.searchParams.get('frn') === current.searchParams.get('frn');
+        if (sameStudent && (isSamePowerSchoolScreen(target.href) ||
+            getDemographicsScreen()?.isCurrent)) {
+          finishDemographics();
+        } else {
+          throw new Error('PowerSchool did not stay on the requested Demographics screen. ' +
+            'Automatic navigation has stopped to prevent a reload loop. ' +
+            'Choose Demographics manually, or start a new Teacher Tools dialog to try again.');
+        }
+        return;
+      }
 
       // --------------------------------------------------------
       // 1. CREATE NEW LOG FORM
@@ -1351,14 +1394,20 @@
             100
           );
           if (demographics.isCurrent) {
-            clearECCState();
-            setECCButton('Demographics open — review student information', 'ready');
+            finishDemographics();
             return;
           }
           if (!demographics.url) {
             throw new Error('PowerSchool did not provide a Demographics screen URL.');
           }
 
+          const target = new URL(demographics.url, location.href);
+          if (target.origin !== location.origin ||
+              !target.pathname.toLowerCase().startsWith('/teachers/studentpages/')) {
+            throw new Error('PowerSchool did not provide a valid student Demographics screen URL.');
+          }
+          state.demographicsNavigationUrl = target.href;
+          saveECCState(state); // Persist the attempt before the document unloads.
           location.assign(demographics.url);
           return;
         }
