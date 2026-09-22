@@ -19,6 +19,7 @@ function fixture({
   const session = new Map(Object.entries(sessionStored));
   const storage = { ...stored };
   const assignments = [];
+  const consoleEntries = [];
   const body = { appendChild(el) { if (el.id) elements.set(el.id, el); } };
   let submits = 0;
   let authenticated = false;
@@ -113,12 +114,15 @@ function fixture({
     Event: class { constructor(type) { this.type = type; } },
     MutationObserver: FakeObserver,
     TextDecoder, Uint8Array, atob, setInterval, clearInterval, setTimeout,
-    console: { log() {}, error() {} }
+    console: {
+      log: (...args) => consoleEntries.push(args),
+      error: (...args) => consoleEntries.push(args)
+    }
   });
   vm.runInContext(source, context);
   return {
     logType, subtype, noteBox, dateInput, incidentDate, actionDate,
-    tagSelect, storage, session, assignments,
+    tagSelect, storage, session, assignments, consoleEntries,
     completeSignIn() {
       authenticated = true;
       signInObserver?.callback([]);
@@ -146,6 +150,8 @@ test('saved SCC selections prepare the parent call and preserve template text', 
   assert.equal(env.noteBox.value, 'PowerSchool header\n\n' + NOTE);
   assert.equal(env.submits, 0);
   assert.equal(env.session.has('ps_ecc_workflow_payload_v1'), false);
+  assert.equal(JSON.stringify(env.consoleEntries).includes('12345678'), false);
+  assert.equal(JSON.stringify(env.consoleEntries).includes(NOTE), false);
 });
 
 test('handoff survives the public sign-in page and resumes after login', async () => {

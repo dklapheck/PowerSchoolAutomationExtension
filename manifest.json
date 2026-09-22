@@ -1,11 +1,8 @@
 {
   "manifest_version": 3,
   "name": "PowerSchool Helper",
-  "version": "3.5.2",
-  "description": "Adds the OR010 shortcut, prepares ECC/SCC logs, and opens student demographics from approved Google Sheets.",
-  "background": {
-    "service_worker": "background.js"
-  },
+  "version": "3.6.0",
+  "description": "Adds the OR010 shortcut and prepares Demographics, ECC, and SCC workflows inside PowerSchool.",
   "content_scripts": [
     {
       "matches": [
@@ -13,20 +10,8 @@
         "https://californiak12.powerschool.com/public/*"
       ],
       "js": [
-        "content.js",
-        "capture.js"
+        "content.js"
       ],
-      "run_at": "document_idle"
-    },
-    {
-      "matches": [
-        "https://docs.google.com/spreadsheets/*"
-      ],
-      "js": [
-        "sheet.js"
-      ],
-      "all_frames": true,
-      "match_about_blank": true,
       "run_at": "document_idle"
     }
   ],

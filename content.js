@@ -511,18 +511,6 @@
         startedAt: Date.now()
       };
 
-      if (kind !== 'DEMOGRAPHICS') {
-        // Keep only non-student form context for the temporary settings capture.
-        // The note and student number remain in the short-lived workflow state.
-        sessionStorage.setItem('ps_form_capture_context_v1', JSON.stringify({
-          kind,
-          date: kind === 'ECC' ? date : '',
-          outcome: kind === 'SCC' ? state.outcome :
-            (state.outcome === 'ECC Attempt' || /\[Attempt\]/.test(note))
-              ? 'Attempt' : 'Conversation'
-        }));
-      }
-
       sessionStorage.setItem(
         ECC_STORAGE_KEY,
         JSON.stringify(state)
@@ -537,7 +525,7 @@
       );
 
       showPersistentError(
-        kind + ' handoff from Google Sheets could not be read',
+        kind + ' handoff could not be read',
         error?.message || String(error)
       );
 
@@ -1154,7 +1142,6 @@
       subtype.selectedOptions[0]?.textContent?.trim() || '';
 
     console.log('[PowerSchool ' + kind + '] Prepared:', {
-      studentNumber: state.studentNumber,
       date: state.date,
       logType: selectedLogType,
       subtype: selectedSubtype
@@ -1254,7 +1241,6 @@
     try {
       console.log('[PowerSchool ECC] Continuing workflow:', {
         path: location.pathname,
-        studentNumber: state.studentNumber,
         step: state.stepCount
       });
 
