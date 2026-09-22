@@ -2,7 +2,9 @@
 
 // Opens the PowerSchool handoff in a new tab.
 // chrome.tabs.create does not require the broad "tabs" permission.
-const HANDOFF_OPEN_DEDUPE_MS = 10 * 60 * 1000;
+// Duplicate frame reports arrive nearly simultaneously. Keep this window short
+// so a teacher can intentionally retry the same handoff a few seconds later.
+const HANDOFF_OPEN_DEDUPE_MS = 3000;
 const HANDOFF_OPEN_STORAGE_KEY = 'recentPowerSchoolHandoffs';
 const recentHandoffs = new Map();
 let recentHandoffsLoaded = null;
