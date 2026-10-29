@@ -13,7 +13,7 @@ function fixture({
   kind = 'SCC', stored = {}, sessionStored = {},
   original = 'PowerSchool header', settings, outcome, attemptNumber,
   pathname = '/teachers/log.html', hash,
-  pageOptions = [], pageValue = '', date = '9/18/2026'
+  pageOptions = [], pageValue = '', date = '9/18/2026', searchRows = []
 } = {}) {
   const elements = new Map();
   const session = new Map(Object.entries(sessionStored));
@@ -82,7 +82,7 @@ function fixture({
     querySelectorAll: selector => selector === 'input, select'
       ? [logType, subtype, pagePicker, tagSelect, dateInput, incidentDate, actionDate]
       : selector === 'select' ? [logType, subtype, pagePicker, tagSelect]
-        : [],
+        : selector === 'tr' ? searchRows : [],
     createElement: () => makeElement()
   };
   const encoded = Buffer.from(JSON.stringify({
@@ -281,5 +281,48 @@ test('demographics handoff finishes without opening or editing a log', async () 
   assert.equal(env.assignments.length, 0);
   assert.equal(env.session.has('ps_ecc_workflow_payload_v1'), false);
   assert.equal(env.noteBox.value, 'PowerSchool header');
+  assert.equal(env.submits, 0);
+});
+
+function searchRow(text, href, label = 'View Student Info') {
+  const link = {textContent: label, href, getAttribute: () => href};
+  return {textContent: text, querySelectorAll: () => [link]};
+}
+
+for (const kind of ['ECC', 'SCC', 'DEMOGRAPHICS']) {
+  test(kind + ' selects the exact Student Number and visits student information before log navigation', async () => {
+    const selected = '/teachers/studentpages/contacts.html?frn=00123&sectionid=7';
+    const env = fixture({kind, pathname: '/teachers/studentSearchResults.html', searchRows: [
+      searchRow('Other Student 912345678', '/teachers/studentpages/contacts.html?frn=00999'),
+      searchRow('Other Student 123456789', '/teachers/studentpages/contacts.html?frn=00888'),
+      searchRow('Intended Student 12345678', selected)
+    ]});
+    await waitFor(() => env.assignments.length === 1);
+    assert.deepEqual(env.assignments, [selected]);
+    assert.doesNotMatch(env.assignments[0], /stride_log_summary/);
+    assert.equal(env.submits, 0);
+    assert.equal(env.noteBox.value, 'PowerSchool header');
+    assert.ok(env.session.has('ps_ecc_workflow_payload_v1'));
+  });
+}
+
+test('duplicate exact search results stop without choosing a student or preparing a log', async () => {
+  const env = fixture({kind: 'ECC', pathname: '/teachers/studentSearchResults.html', searchRows: [
+    searchRow('Student A 12345678', '/teachers/studentpages/contacts.html?frn=00123'),
+    searchRow('Student B 12345678', '/teachers/studentpages/contacts.html?frn=00456')
+  ]});
+  await waitFor(() => env.button?.textContent === 'ECC automation stopped');
+  assert.match(env.session.get('ps_helper_last_error_v1'), /More than one search result/);
+  assert.equal(env.assignments.length, 0);
+  assert.equal(env.submits, 0);
+  assert.equal(env.noteBox.value, 'PowerSchool header');
+});
+
+test('a matched row without a student-information link cannot use an unrelated link as fallback', async () => {
+  const env = fixture({kind: 'ECC', pathname: '/teachers/studentSearchResults.html', searchRows: [
+    searchRow('Student 12345678', '/teachers/reports.html', 'Report')
+  ]});
+  await waitFor(() => env.button?.textContent === 'ECC automation stopped');
+  assert.equal(env.assignments.length, 0);
   assert.equal(env.submits, 0);
 });

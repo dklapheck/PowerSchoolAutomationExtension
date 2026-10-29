@@ -2,6 +2,23 @@
 
 This extension prepares PowerSchool ECC and Student Connection Call (SCC) logs from an approved roster Google Sheet and leaves **Submit** to the teacher. It can also open a selected student's Demographics screen from **Teacher Tools > Open Demographics**. An SCC is usually a conversation with a parent at the start of a semester. The extension also adds an OR010 shortcut on PowerSchool teacher pages.
 
+## Student selection and missing logs (3.5.3)
+
+Keep only one PowerSchool student tab open while preparing and submitting logs,
+including student Demographics pages. Search results must match the complete
+Student Number; ambiguous results stop the workflow. The extension opens
+PowerSchool's own student-information link before using that student's Log
+Entries screen. It no longer constructs a shortcut straight to a log summary
+from search results.
+
+The status button confirms that a form was prepared, not that Submit saved it.
+After submitting, verify the entry appears under the intended student's name
+and number before opening another student. If the entry cannot be found, stop
+and investigate instead of automatically retrying. The extension does not
+verify the server's current student at submission or the saved record. These
+changes reduce navigation risks; they do not establish what happened to a
+previously missing log.
+
 ## Use with a new roster sheet
 
 1. Download this repository and replace the files in the folder used by your unpacked extension.

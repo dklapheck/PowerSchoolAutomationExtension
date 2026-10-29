@@ -56,7 +56,7 @@
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  function waitFor(getter, timeout = 10000, interval = 100) {
+  function waitFor(getter, timeout = 10000, interval = 100, rejectErrors = false) {
     return new Promise((resolve, reject) => {
       const start = Date.now();
 
@@ -65,7 +65,12 @@
 
         try {
           result = getter();
-        } catch (_) {
+        } catch (error) {
+          if (rejectErrors) {
+            clearInterval(timer);
+            reject(error);
+            return;
+          }
           // Keep waiting.
         }
 
@@ -687,11 +692,17 @@
   }
 
   function findStudentRow(studentNumber) {
-    return [
+    // Student Numbers are identifiers: never accept another student's longer
+    // number because it happens to contain the requested digits.
+    if (!/^\d+$/.test(studentNumber)) throw new Error('Invalid student number.');
+    const exactNumber = new RegExp('(^|\\D)' + studentNumber + '(?!\\d)');
+    const matches = [
       ...document.querySelectorAll('tr')
-    ].find(row =>
-      normalize(row.textContent).includes(studentNumber)
-    ) || null;
+    ].filter(row => exactNumber.test(normalize(row.textContent)));
+    if (matches.length > 1) {
+      throw new Error('More than one search result matches Student Number ' + studentNumber + '. Select the student manually before logging.');
+    }
+    return matches[0] || null;
   }
 
   function findStudentInfoLink(row) {
@@ -712,43 +723,8 @@
           a.getAttribute('href') || ''
         )
       ) ||
-      links[0] ||
       null
     );
-  }
-
-  function getStudentLogSummaryUrl(studentLink) {
-    if (!studentLink) return null;
-
-    try {
-      const url = new URL(
-        studentLink.getAttribute('href') || studentLink.href,
-        location.origin
-      );
-
-      const frn = url.searchParams.get('frn');
-      const sectionId = url.searchParams.get('sectionid');
-
-      if (!frn || !/^\d+$/.test(frn)) {
-        return null;
-      }
-
-      const target = new URL(
-        '/teachers/studentpages/stride_log_summary.html',
-        location.origin
-      );
-
-      target.searchParams.set('frn', frn);
-
-      if (sectionId) {
-        target.searchParams.set('sectionid', sectionId);
-      }
-
-      return target.pathname + target.search;
-
-    } catch (_) {
-      return null;
-    }
   }
 
   // ============================================================
@@ -1358,8 +1334,8 @@
 
       // --------------------------------------------------------
       // 4. STUDENT SEARCH RESULTS
-      // Prefer direct Log Entries navigation so PowerSchool's
-      // remembered Contacts screen is bypassed completely.
+      // Open PowerSchool's own student-information link first instead of
+      // assuming a constructed summary URL establishes the submission context.
       // --------------------------------------------------------
       if (
         path.endsWith('/teachers/studentsearchresults.html')
@@ -1371,7 +1347,8 @@
         const row = await waitFor(
           () => findStudentRow(state.studentNumber),
           10000,
-          100
+          100,
+          true
         );
 
         const studentLink = findStudentInfoLink(row);
@@ -1382,34 +1359,10 @@
           );
         }
 
-        if (kind === 'DEMOGRAPHICS') {
-          setECCButton(
-            `Demographics · ${state.studentNumber} · opening student`
-          );
-          location.assign(studentLink.href);
-          return;
-        }
-
-        const directLogUrl = getStudentLogSummaryUrl(studentLink);
-
-        if (directLogUrl) {
-          console.log(
-            '[PowerSchool ECC] Direct Log Entries URL:',
-            directLogUrl
-          );
-
-          setECCButton(
-            `${kind} · ${state.studentNumber} · opening Log Entries`
-          );
-
-          location.assign(directLogUrl);
-          return;
-        }
-
-        // Safe fallback: force same-tab navigation so sessionStorage
-        // survives. Do not use studentLink.click().
+        // Force same-tab navigation so workflow state survives. The next
+        // student page supplies its own Log Entries or Demographics link.
         setECCButton(
-          `${kind} · ${state.studentNumber} · opening student`
+          `${workflowLabel} · ${state.studentNumber} · opening student`
         );
 
         location.assign(studentLink.href);
