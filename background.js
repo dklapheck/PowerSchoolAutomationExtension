@@ -40,6 +40,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const handoffHashes = {
     OPEN_POWERSCHOOL_ECC: 'ecc=',
     OPEN_POWERSCHOOL_SCC: 'scc=',
+    OPEN_POWERSCHOOL_PARENT: 'parent=',
     OPEN_POWERSCHOOL_DEMOGRAPHICS: 'demographics='
   };
   if (!message || !handoffHashes[message.type]) {

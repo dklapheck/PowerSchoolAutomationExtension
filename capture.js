@@ -249,7 +249,8 @@
     for (const [value, label] of [
       ['SCC Success', 'SCC Success'], ['SCC Attempt', 'SCC Attempt'],
       ['Conversation', 'ECC Conversation (successful)'],
-      ['Attempt', 'ECC Attempt (unsuccessful)']
+      ['Attempt', 'ECC Attempt (unsuccessful)'],
+      ['Parent Contact', 'Parent Contact (successful)']
     ]) {
       const option = document.createElement('option');
       option.value = value;
@@ -259,12 +260,13 @@
     const context = readContext();
     scenario.value = context.kind === 'SCC'
       ? context.outcome === 'SCC Attempt' ? 'SCC Attempt' : 'SCC Success' :
+      context.kind === 'PARENT' ? 'Parent Contact' :
       context.outcome === 'Attempt' ? 'Attempt' : 'Conversation';
     scenarioLabel.append(scenario);
     details.append(scenarioLabel);
 
     const dateLabel = document.createElement('label');
-    dateLabel.textContent = ' Requested ECC date ';
+    dateLabel.textContent = ' Requested log date ';
     const dateInput = document.createElement('input');
     dateInput.type = 'text';
     dateInput.placeholder = 'e.g. 9/18/2026';
@@ -303,11 +305,12 @@
       try {
         const settings = snapshot(scope, host);
         const isScc = scenario.value.startsWith('SCC ');
-        const outcome = isScc ? '' : scenario.value;
+        const isParent = scenario.value === 'Parent Contact';
+        const outcome = isScc || isParent ? '' : scenario.value;
         const record = {
           schemaVersion: 1,
           capturedAt: new Date().toISOString(),
-          workflow: isScc ? scenario.value : 'ECC',
+          workflow: isScc || isParent ? scenario.value : 'ECC',
           eccOutcome: outcome,
           requestedEccDate: outcome ? clean(dateInput.value, 32) : '',
           ...settings
@@ -332,7 +335,7 @@
           settings.logType.value, settings.logType.text,
           settings.subtype.value, settings.subtype.text
         ].map(value => clean(value)).join('\t'));
-        status.textContent = 'Copied four cells. Paste into column B of the matching row in Instructions and Settings (SCC Success row 35, SCC Attempt 36, ECC Conversation 37, ECC Attempt 38).';
+        status.textContent = 'Copied four cells. Paste into the Log Type value column of the matching PowerSchoolSettings workflow row (SCC Success, SCC Attempt, ECC Conversation, ECC Attempt or Parent Contact).';
       } catch (error) {
         status.textContent = 'Could not copy Settings cells: ' + (error?.message || String(error));
       }

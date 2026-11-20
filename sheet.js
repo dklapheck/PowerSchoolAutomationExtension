@@ -15,6 +15,12 @@
       hash: 'scc='
     },
     {
+      prefix: 'PARENT_HANDOFF_V1:',
+      kind: 'Parent Contact',
+      messageType: 'OPEN_POWERSCHOOL_PARENT',
+      hash: 'parent='
+    },
+    {
       prefix: 'DEMOGRAPHICS_HANDOFF_V1:',
       kind: 'Demographics',
       messageType: 'OPEN_POWERSCHOOL_DEMOGRAPHICS',

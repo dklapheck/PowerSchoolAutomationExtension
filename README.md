@@ -1,6 +1,34 @@
 # PowerSchool Helper
 
-This extension prepares PowerSchool ECC and Student Connection Call (SCC) logs from an approved roster Google Sheet and leaves **Submit** to the teacher. It can also open a selected student's Demographics screen from **Teacher Tools > Open Demographics**. An SCC is usually a conversation with a parent at the start of a semester. The extension also adds an OR010 shortcut on PowerSchool teacher pages.
+This extension prepares PowerSchool ECC, Student Connection Call (SCC), and Parent Contact logs from an approved roster Google Sheet and leaves **Submit** to the teacher. It can also open a selected student's Demographics screen from **Teacher Tools > Open Demographics**. An SCC is usually a conversation with a parent at the start of a semester. The extension also adds an OR010 shortcut on PowerSchool teacher pages.
+
+## Parent Contact logs (3.6.0)
+
+The roster can now send a successful parent contact from Master's **Parent
+Communication** column. In the roster, use **Update → ECC & Demographics → Log
+selected student's parent contact**, or check the Parent Contact entries in
+**Archive and Log All ECC**. The roster uses **Contact Date** (formerly ECC
+Attempt Date) as the log date.
+
+The extension follows the same steps as ECC and SCC: Sonoma check, exact
+Student Number match, the student's Log Entries, then **New**. It fills Log Type,
+Subtype, the three date fields and the note from the **Parent Contact** row of
+the roster's PowerSchoolSettings table. If the PowerSchool template contains
+`Note`, the note replaces it; otherwise the note is added below the template.
+If that row's Log Type and Subtype values are blank, the status button asks you
+to choose them on the form and then click it; those manual choices are not
+remembered. The extension never clicks **Submit**.
+
+To fill the Parent Contact row, open a New Log, choose the parent contact
+Type/Subtype, expand **Capture PowerSchool settings**, choose **Parent Contact
+(successful)** and click **Copy Type/Subtype for Settings**. Paste the four
+cells starting at **Log Type value** in the **Parent Contact** row of
+**PowerSchoolSettings** on the roster's **Info** tab.
+
+Note text is inserted literally, including dollar-sign sequences such as `$&`.
+
+After replacing the files, click **Reload** for this extension at
+`chrome://extensions` and refresh the roster and PowerSchool tabs.
 
 ## Student selection and missing logs (3.5.3)
 

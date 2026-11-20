@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const test = require('node:test');
 
 function element(tagName, props = {}) {
   return {
@@ -19,7 +20,7 @@ function element(tagName, props = {}) {
   };
 }
 
-async function run() {
+async function run(context) {
   const chosen = (tagName, name, value, label) => element(tagName, {
     name, id: name, value,
     selectedOptions: [{ textContent: label }],
@@ -56,7 +57,7 @@ async function run() {
     async set(data) { stored = data.powerSchoolSettingsCapturesV1; }
   } } };
   const sessionStorage = {
-    getItem() { return JSON.stringify({ kind: 'ECC', outcome: 'Attempt', date: '9/14/2026' }); }
+    getItem() { return JSON.stringify(context); }
   };
   const source = fs.readFileSync(path.join(__dirname, '..', 'capture.js'), 'utf8');
   vm.runInNewContext(source, {
@@ -68,12 +69,15 @@ async function run() {
   assert(host, 'capture control inserted next to the log form');
   const details = host.children[0];
   const scenario = details.children.find(child => child.tagName === 'LABEL').children[0];
-  assert.equal(scenario.value, 'Attempt');
+  const isParent = context.kind === 'PARENT';
+  assert.equal(scenario.value, isParent ? 'Parent Contact' : 'Attempt');
+  assert(scenario.children.some(option => option.value === 'Parent Contact'));
   const button = details.children.find(child => child.tagName === 'BUTTON');
   await button.events.click();
   assert.equal(stored.length, 1);
-  assert.equal(stored[0].requestedEccDate, '9/14/2026');
-  assert.equal(stored[0].eccOutcome, 'Attempt');
+  assert.equal(stored[0].workflow, isParent ? 'Parent Contact' : 'ECC');
+  assert.equal(stored[0].requestedEccDate, isParent ? '' : '9/14/2026');
+  assert.equal(stored[0].eccOutcome, isParent ? '' : 'Attempt');
   assert.equal(stored[0].dateControls.length, 2);
   assert.equal(stored[0].dateControls[0].options[1].text, 'October');
   assert.equal(stored[0].otherDropdowns[0].text, 'No answer');
@@ -86,7 +90,9 @@ async function run() {
   );
   await copySettings.events.click();
   assert.equal(copied, '1187\tLog Type\tGE:ECC\tECC Attempt');
-  console.log('Capture test passed.');
 }
 
-run().catch(error => { console.error(error); process.exitCode = 1; });
+test('ECC capture excludes student details and copies selected settings', () =>
+  run({kind: 'ECC', outcome: 'Attempt', date: '9/14/2026'}));
+test('Parent Contact capture selects its workflow and excludes student details', () =>
+  run({kind: 'PARENT', outcome: 'Parent Contact', date: '9/14/2026'}));
