@@ -63,3 +63,18 @@ test('a handoff can be retried a few seconds after the duplicate burst', async (
   await env.send(message);
   assert.equal(env.opened.length, 2);
 });
+
+test('background opens Parent Contact handoffs and rejects mismatched hashes', async () => {
+  const env = run();
+  const ok = await env.send({
+    type: 'OPEN_POWERSCHOOL_PARENT',
+    url: 'https://californiak12.powerschool.com/teachers/home.html#parent=abc_123'
+  });
+  assert.equal(ok.ok, true);
+  const rejected = await env.send({
+    type: 'OPEN_POWERSCHOOL_PARENT',
+    url: 'https://californiak12.powerschool.com/teachers/home.html#ecc=abc_123'
+  });
+  assert.equal(rejected.ok, false);
+  assert.equal(env.opened.length, 1);
+});

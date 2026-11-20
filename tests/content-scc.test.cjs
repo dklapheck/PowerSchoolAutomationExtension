@@ -11,7 +11,7 @@ const NOTE = 'On 9/18/2026, spoke with parent.';
 
 function fixture({
   kind = 'SCC', stored = {}, sessionStored = {},
-  original = 'PowerSchool header', settings, outcome, attemptNumber,
+  original = 'PowerSchool header', note = NOTE, settings, outcome, attemptNumber,
   pathname = '/teachers/log.html', hash,
   pageOptions = [], pageValue = '', date = '9/18/2026', searchRows = []
 } = {}) {
@@ -86,7 +86,7 @@ function fixture({
     createElement: () => makeElement()
   };
   const encoded = Buffer.from(JSON.stringify({
-    v: 1, studentNumber: '12345678', date, note: NOTE, settings, outcome, attemptNumber
+    v: 1, studentNumber: '12345678', date, note, settings, outcome, attemptNumber
   })).toString('base64url');
   const locationHash = typeof hash === 'string'
     ? hash : '#' + kind.toLowerCase() + '=' + encoded;
@@ -289,7 +289,7 @@ function searchRow(text, href, label = 'View Student Info') {
   return {textContent: text, querySelectorAll: () => [link]};
 }
 
-for (const kind of ['ECC', 'SCC', 'DEMOGRAPHICS']) {
+for (const kind of ['ECC', 'SCC', 'PARENT', 'DEMOGRAPHICS']) {
   test(kind + ' selects the exact Student Number and visits student information before log navigation', async () => {
     const selected = '/teachers/studentpages/contacts.html?frn=00123&sectionid=7';
     const env = fixture({kind, pathname: '/teachers/studentSearchResults.html', searchRows: [
@@ -325,4 +325,87 @@ test('a matched row without a student-information link cannot use an unrelated l
   await waitFor(() => env.button?.textContent === 'ECC automation stopped');
   assert.equal(env.assignments.length, 0);
   assert.equal(env.submits, 0);
+});
+
+test('Parent Contact handoff uses Settings, fills dates, keeps the template, and never submits', async () => {
+  const env = fixture({
+    kind: 'PARENT',
+    stored: { sccLogTypeValue: '1187', sccLogSubtypeValue: 'GE:ECC' },
+    outcome: 'Parent Contact',
+    settings: {
+      typeValue: 'SCC_TYPE', subtypeValue: 'SCC_PARENT', extraDropdowns: [],
+      dateFields: ['entryLogDate', 'UF-008019-1', 'UF-008041-1'], tagMap: {}, tagLabel: ''
+    }
+  });
+  await waitFor(() => env.button?.textContent === 'Parent Contact ready — review & Submit');
+  assert.equal(env.logType.value, 'SCC_TYPE');
+  assert.equal(env.subtype.value, 'SCC_PARENT');
+  assert.equal(env.dateInput.value, '9/18/2026');
+  assert.equal(env.incidentDate.value, '9/18/2026');
+  assert.equal(env.actionDate.value, '9/18/2026');
+  assert.equal(env.noteBox.value, 'PowerSchool header\n\n' + NOTE);
+  assert.equal(env.submits, 0);
+  assert.equal(env.session.has('ps_ecc_workflow_payload_v1'), false);
+});
+
+test('Parent Contact replaces a Note placeholder when the template has one', async () => {
+  const env = fixture({
+    kind: 'PARENT', original: 'Parent contact: Note',
+    settings: { typeValue: '1187', subtypeValue: 'SCC_PARENT', extraDropdowns: [] }
+  });
+  await waitFor(() => env.button?.textContent === 'Parent Contact ready — review & Submit');
+  assert.equal(env.noteBox.value, 'Parent contact: ' + NOTE);
+});
+
+for (const kind of ['PARENT', 'ECC', 'SCC']) {
+  test(kind + ' inserts dollar-sign sequences in notes literally', async () => {
+    const note = "Parent wrote: $& $` $' $$ and $25.";
+    const env = fixture({kind, original: 'Contact: Note — reviewed', note,
+      settings: {typeValue: '1187', subtypeValue: 'SCC_PARENT', extraDropdowns: []}});
+    const label = kind === 'PARENT' ? 'Parent Contact' : kind;
+    await waitFor(() => env.button?.textContent === label + ' ready — review & Submit' ||
+      env.button?.textContent === label + ' automation stopped');
+    assert.equal(env.noteBox.value, 'Contact: ' + note + ' — reviewed');
+    assert.equal(env.button.textContent, label + ' ready — review & Submit');
+    assert.equal(env.submits, 0);
+  });
+}
+
+test('blank Parent Contact Settings ask for manual choices and do not remember them', async () => {
+  const env = fixture({
+    kind: 'PARENT',
+    stored: { sccLogTypeValue: '1187', sccLogSubtypeValue: 'GE:ECC' },
+    settings: { typeValue: '', subtypeValue: '', extraDropdowns: [] }
+  });
+  await waitFor(() => env.button?.textContent === 'Parent Contact: choose Type & Subtype, then click here');
+  assert.equal(env.noteBox.value, 'PowerSchool header');
+  env.logType.value = 'SCC_TYPE';
+  env.subtype.value = 'SCC_PARENT';
+  env.button.onclick();
+  await waitFor(() => env.button?.textContent === 'Parent Contact ready — review & Submit');
+  assert.equal(env.storage.sccLogTypeValue, '1187');
+  assert.equal(env.storage.sccLogSubtypeValue, 'GE:ECC');
+  assert.equal(env.submits, 0);
+});
+
+test('unavailable Parent Contact choice stops before changing the note', async () => {
+  const env = fixture({
+    kind: 'PARENT',
+    settings: { typeValue: '1187', subtypeValue: 'missing_subtype', extraDropdowns: [] }
+  });
+  await waitFor(() => env.button?.textContent === 'Parent Contact automation stopped');
+  assert.equal(env.noteBox.value, 'PowerSchool header');
+  assert.equal(env.submits, 0);
+});
+
+test('Parent Contact survives sign-in and resumes with its own settings', async () => {
+  const settings = {typeValue: 'SCC_TYPE', subtypeValue: 'SCC_PARENT', extraDropdowns: []};
+  const login = fixture({kind: 'PARENT', pathname: '/public/home.html', settings});
+  const pending = login.session.get('ps_ecc_workflow_payload_v1');
+  assert.equal(JSON.parse(pending).kind, 'PARENT');
+  const resumed = fixture({hash: '', sessionStored: {ps_ecc_workflow_payload_v1: pending}});
+  await waitFor(() => resumed.button?.textContent === 'Parent Contact ready — review & Submit');
+  assert.equal(resumed.noteBox.value, 'PowerSchool header\n\n' + NOTE);
+  assert.equal(resumed.session.has('ps_ecc_workflow_payload_v1'), false);
+  assert.equal(resumed.submits, 0);
 });

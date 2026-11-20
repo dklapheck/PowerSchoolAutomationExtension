@@ -10,7 +10,7 @@
   // - Makes no outside network requests.
   // - ECC payload is removed from the URL immediately and kept
   //   only in PowerSchool sessionStorage during navigation.
-  // - ECC and SCC workflows NEVER click Submit.
+  // - ECC, SCC and Parent Contact workflows NEVER click Submit.
   // ============================================================
 
   const SONOMA_CODE = 'CAVA-SO';
@@ -447,6 +447,7 @@
     const handoff = [
       { marker: '#demographics=', kind: 'DEMOGRAPHICS' },
       { marker: '#scc=', kind: 'SCC' },
+      { marker: '#parent=', kind: 'PARENT' },
       { marker: '#ecc=', kind: 'ECC' }
     ].find(candidate => hash.startsWith(candidate.marker));
     if (!handoff) return null;
@@ -521,8 +522,9 @@
         // The note and student number remain in the short-lived workflow state.
         sessionStorage.setItem('ps_form_capture_context_v1', JSON.stringify({
           kind,
-          date: kind === 'ECC' ? date : '',
+          date: kind === 'ECC' || kind === 'PARENT' ? date : '',
           outcome: kind === 'SCC' ? state.outcome :
+            kind === 'PARENT' ? 'Parent Contact' :
             (state.outcome === 'ECC Attempt' || /\[Attempt\]/.test(note))
               ? 'Attempt' : 'Conversation'
         }));
@@ -575,7 +577,8 @@
   }
 
   function getWorkflowLabel(kind) {
-    return kind === 'DEMOGRAPHICS' ? 'Demographics' : kind;
+    return kind === 'DEMOGRAPHICS' ? 'Demographics' :
+      kind === 'PARENT' ? 'Parent Contact' : kind;
   }
 
   // ============================================================
@@ -808,7 +811,7 @@
   // FILL ECC OR STUDENT CONNECTION CALL LOG
   // ============================================================
 
-  async function getSccSelections(logType, manualOnly = false) {
+  async function getSccSelections(logType, manualOnly = false, label = 'SCC') {
     if (!manualOnly) {
       // Compatibility for older Apps Script handoffs without Settings values.
       const saved = await chrome.storage.local.get({
@@ -826,7 +829,7 @@
 
     // The first time, the teacher chooses this school's SCC options in
     // PowerSchool. Do not guess values from ECC or from another school.
-    setECCButton('SCC: choose Type & Subtype, then click here', 'setup');
+    setECCButton(label + ': choose Type & Subtype, then click here', 'setup');
     return new Promise(resolve => {
       getECCButton().onclick = () => {
         const subtype = document.querySelector('select[name="subtype"]');
@@ -834,8 +837,9 @@
         const subtypeOption = subtype?.selectedOptions[0];
         if (!logType.value || !subtype?.value ||
             typeOption?.disabled || subtypeOption?.disabled) {
-          showPersistentError('SCC selections needed',
-            'Choose the Student Connection Call Log Type and Subtype in PowerSchool, then click the blue SCC button.');
+          showPersistentError(label + ' selections needed',
+            'Choose the ' + (label === 'SCC' ? 'Student Connection Call' : label) +
+            ' Log Type and Subtype in PowerSchool, then click the blue ' + label + ' button.');
           return;
         }
         getECCButton().onclick = null;
@@ -979,9 +983,10 @@
   }
 
   async function fillECCLog(state) {
-    const kind = state.kind === 'SCC' ? 'SCC' : 'ECC';
+    const kind = state.kind === 'SCC' || state.kind === 'PARENT' ? state.kind : 'ECC';
+    const label = getWorkflowLabel(kind);
     setECCButton(
-      `Preparing ${kind} log · ${state.studentNumber}`
+      `Preparing ${label} log · ${state.studentNumber}`
     );
 
     const logType = await waitFor(
@@ -995,6 +1000,10 @@
       selections = { typeValue: settings.typeValue, subtypeValue: settings.subtypeValue, manual: false };
     } else if (kind === 'SCC') {
       selections = await getSccSelections(logType, !!settings);
+    } else if (kind === 'PARENT') {
+      // No built-in Parent Contact values: blank Settings means choose manually
+      // on this log. These choices are not remembered.
+      selections = await getSccSelections(logType, true, label);
     } else if (settings) {
       throw new Error('Set both ECC Log Type and Subtype values in Instructions and Settings.');
     } else {
@@ -1003,7 +1012,7 @@
 
     if (!selections.manual) {
       if (![...logType.options].some(option => option.value === selections.typeValue)) {
-        throw new Error(kind + ' Log Type is unavailable. ' +
+        throw new Error(label + ' Log Type is unavailable. ' +
           (settings ? 'Update the value in Instructions and Settings.' :
             kind === 'SCC' ? 'Clear saved SCC selections in Extension options and choose again.' : 'Nothing was overwritten.'));
       }
@@ -1017,7 +1026,7 @@
       () => document.querySelector('select[name="subtype"]')
     );
     if (![...subtype.options].some(option => option.value === selections.subtypeValue)) {
-      throw new Error(kind + ' Log Subtype is unavailable. ' +
+      throw new Error(label + ' Log Subtype is unavailable. ' +
         (settings ? 'Update the value in Instructions and Settings.' :
           kind === 'SCC' ? 'Clear saved SCC selections in Extension options and choose again.' : 'Nothing was overwritten.'));
     }
@@ -1052,7 +1061,7 @@
     }
 
     if (logType.value !== selections.typeValue || subtype.value !== selections.subtypeValue) {
-      throw new Error('PowerSchool did not accept the expected ' + kind + ' Log Type/Subtype.');
+      throw new Error('PowerSchool did not accept the expected ' + label + ' Log Type/Subtype.');
     }
 
     // Give the subtype's Log Entry Text template time to populate.
@@ -1089,8 +1098,8 @@
       templatedNoteBox.value || ''
     );
 
-    // ECC requires its known Note placeholder. SCC preserves any other
-    // PowerSchool template text and appends the call note for review.
+    // ECC requires its known Note placeholder. SCC and Parent Contact preserve
+    // any other PowerSchool template text and append the note for review.
     if (kind === 'ECC' && !/\bNote\b/.test(originalLogText)) {
       throw new Error(
         'The Log Entry Text did not contain the expected "Note" placeholder. ' +
@@ -1099,7 +1108,7 @@
     }
 
     templatedNoteBox.value = /\bNote\b/.test(originalLogText)
-      ? originalLogText.replace(/\bNote\b/, state.note)
+      ? originalLogText.replace(/\bNote\b/, () => state.note)
       : (originalLogText.trim()
         ? originalLogText.trimEnd() + '\n\n' + state.note
         : state.note);
@@ -1111,7 +1120,7 @@
     if (logType.value !== selections.typeValue ||
         document.querySelector('select[name="subtype"]')?.value !== selections.subtypeValue ||
         !String(document.querySelector(ECC_NOTE_SELECTOR)?.value || '').includes(state.note)) {
-      throw new Error('PowerSchool changed the ' + kind + ' log after it was prepared. Review the form manually.');
+      throw new Error('PowerSchool changed the ' + label + ' log after it was prepared. Review the form manually.');
     }
 
     if (kind === 'SCC' && selections.manual) {
@@ -1129,7 +1138,7 @@
     const selectedSubtype =
       subtype.selectedOptions[0]?.textContent?.trim() || '';
 
-    console.log('[PowerSchool ' + kind + '] Prepared:', {
+    console.log('[PowerSchool ' + label + '] Prepared:', {
       studentNumber: state.studentNumber,
       date: state.date,
       logType: selectedLogType,
@@ -1147,7 +1156,7 @@
     templatedNoteBox.focus();
 
     setECCButton(
-      kind + ' ready — review & Submit',
+      label + ' ready — review & Submit',
       'ready'
     );
 
@@ -1200,9 +1209,8 @@
       return;
     }
 
-    const kind = state.kind === 'DEMOGRAPHICS'
-      ? 'DEMOGRAPHICS'
-      : state.kind === 'SCC' ? 'SCC' : 'ECC';
+    const kind = ['DEMOGRAPHICS', 'SCC', 'PARENT'].includes(state.kind)
+      ? state.kind : 'ECC';
     const workflowLabel = getWorkflowLabel(kind);
     const path = location.pathname.toLowerCase();
     const isWorkflowPage =
@@ -1242,7 +1250,7 @@
           throw new Error('PowerSchool opened a log form instead of student Demographics.');
         }
         setECCButton(
-          `${kind} · ${state.studentNumber} · preparing log`
+          `${workflowLabel} · ${state.studentNumber} · preparing log`
         );
 
         await fillECCLog(state);
@@ -1259,7 +1267,7 @@
         )
       ) {
         setECCButton(
-          `${kind} · ${state.studentNumber} · finding New`
+          `${workflowLabel} · ${state.studentNumber} · finding New`
         );
 
         const newLogUrl = await waitFor(
@@ -1274,7 +1282,7 @@
         );
 
         setECCButton(
-          `${kind} · ${state.studentNumber} · opening New Log`
+          `${workflowLabel} · ${state.studentNumber} · opening New Log`
         );
 
         location.assign(newLogUrl);
@@ -1310,7 +1318,7 @@
         }
 
         setECCButton(
-          `${kind} · ${state.studentNumber} · finding Log Entries`
+          `${workflowLabel} · ${state.studentNumber} · finding Log Entries`
         );
 
         const logEntriesUrl = await waitFor(
@@ -1325,7 +1333,7 @@
         );
 
         setECCButton(
-          `${kind} · ${state.studentNumber} · opening Log Entries`
+          `${workflowLabel} · ${state.studentNumber} · opening Log Entries`
         );
 
         location.assign(logEntriesUrl);
@@ -1341,7 +1349,7 @@
         path.endsWith('/teachers/studentsearchresults.html')
       ) {
         setECCButton(
-          `${kind} · ${state.studentNumber} · finding student`
+          `${workflowLabel} · ${state.studentNumber} · finding student`
         );
 
         const row = await waitFor(
@@ -1373,7 +1381,7 @@
       // 5. BEFORE SEARCHING: ENSURE SONOMA
       // --------------------------------------------------------
       setECCButton(
-          `${kind} · ${state.studentNumber} · checking Sonoma`
+          `${workflowLabel} · ${state.studentNumber} · checking Sonoma`
       );
 
       await waitFor(
@@ -1384,7 +1392,7 @@
 
       if (!currentSchoolIsSonoma()) {
         setECCButton(
-          `${kind} · ${state.studentNumber} · switching to Sonoma`
+          `${workflowLabel} · ${state.studentNumber} · switching to Sonoma`
         );
 
         await switchToSonoma();
@@ -1395,7 +1403,7 @@
       // 6. SEARCH BY STUDENT NUMBER
       // --------------------------------------------------------
       setECCButton(
-          `${kind} · ${state.studentNumber} · searching student`
+          `${workflowLabel} · ${state.studentNumber} · searching student`
       );
 
       submitStudentNumberSearch(state.studentNumber);
