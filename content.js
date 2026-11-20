@@ -35,6 +35,7 @@
   const SCC_SUBTYPE_LABEL_KEY = 'sccLogSubtypeLabel';
 
   const ERROR_PANEL_ID = 'ps-helper-error-panel';
+  const SETTINGS_PANEL_ID = 'ps-helper-settings-panel';
   const ERROR_STORAGE_KEY = 'ps_helper_last_error_v1';
   let eccWorkflowRunning = false;
   let signInObserver = null;
@@ -200,6 +201,78 @@
     } catch (_) {
       sessionStorage.removeItem(ERROR_STORAGE_KEY);
     }
+  }
+
+  // Shown after Type/Subtype were chosen by hand, so the teacher can paste the
+  // values into the workflow's PowerSchoolSettings row on Info and skip the
+  // manual step next time. Contains no student data.
+  function showSettingsPanel(workflow, choices) {
+    document.getElementById(SETTINGS_PANEL_ID)?.remove();
+    const panel = document.createElement('div');
+    panel.id = SETTINGS_PANEL_ID;
+    Object.assign(panel.style, {
+      position: 'fixed', right: '16px', bottom: '16px', zIndex: '2147483647',
+      width: 'min(460px, calc(100vw - 32px))', padding: '12px',
+      border: '2px solid #174a75', borderRadius: '8px', background: '#f3f8fd',
+      color: '#222', fontFamily: 'Arial, sans-serif', fontSize: '13px',
+      boxShadow: '0 4px 16px rgba(0,0,0,0.3)'
+    });
+    const heading = document.createElement('div');
+    heading.textContent = 'Settings for the "' + workflow + '" row on Info';
+    Object.assign(heading.style, { fontWeight: '700', marginBottom: '6px', color: '#174a75' });
+    panel.appendChild(heading);
+    const help = document.createElement('div');
+    help.textContent = 'Paste these into Log Type value and Subtype value to skip choosing them next time.';
+    help.style.marginBottom = '8px';
+    panel.appendChild(help);
+    const copyButton = (text, value) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = text;
+      button.style.marginRight = '6px';
+      button.onclick = async () => {
+        try {
+          await navigator.clipboard.writeText(value);
+          button.textContent = 'Copied';
+        } catch (_) {
+          button.textContent = 'Copy failed: select the value instead';
+        }
+      };
+      return button;
+    };
+    for (const [name, value, shown] of [
+      ['Log Type value', choices.typeValue, choices.typeText],
+      ['Subtype value', choices.subtypeValue, choices.subtypeText]
+    ]) {
+      const row = document.createElement('div');
+      row.style.margin = '4px 0';
+      const code = document.createElement('code');
+      code.textContent = value;
+      Object.assign(code.style, { userSelect: 'all', fontFamily: 'Consolas, monospace',
+        background: '#fff', padding: '1px 4px', border: '1px solid #c5d6e8' });
+      const span = text => {
+        const element = document.createElement('span');
+        element.textContent = text;
+        return element;
+      };
+      row.appendChild(span(name + ': '));
+      row.appendChild(code);
+      row.appendChild(span(shown ? ' (' + shown + ') ' : ' '));
+      row.appendChild(copyButton('Copy', value));
+      panel.appendChild(row);
+    }
+    const actions = document.createElement('div');
+    actions.style.marginTop = '8px';
+    // A tab between the values fills two side-by-side cells in one paste.
+    actions.appendChild(copyButton('Copy both (side-by-side cells)', choices.typeValue + '\t' + choices.subtypeValue));
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.textContent = 'Dismiss';
+    close.onclick = () => panel.remove();
+    actions.appendChild(close);
+    panel.appendChild(actions);
+    document.body.appendChild(panel);
+    return panel;
   }
 
   // ============================================================
@@ -601,7 +674,11 @@
     chrome.storage.local.remove(PENDING_HANDOFF_STORAGE_KEY).catch(() => {});
   }
 
-  function getWorkflowLabel(kind) {
+  // A Parent Contact handoff can carry another workflow's name (for example
+  // "5+ Attempts" from the roster), which the status button then shows.
+  function getWorkflowLabel(kind, outcome) {
+    const named = String(outcome || '').trim();
+    if (kind === 'PARENT' && /^[A-Za-z0-9 +&()\/.-]{1,40}$/.test(named)) return named;
     return kind === 'DEMOGRAPHICS' ? 'Demographics' :
       kind === 'PARENT' ? 'Parent Contact' : kind;
   }
@@ -667,7 +744,8 @@
   }
 
   function failECC(message) {
-    const kind = getWorkflowLabel(loadECCState()?.kind || 'ECC');
+    const failed = loadECCState();
+    const kind = getWorkflowLabel(failed?.kind || 'ECC', failed?.outcome);
     console.error('[PowerSchool ' + kind + ']', message);
 
     clearECCState();
@@ -1035,7 +1113,7 @@
 
   async function fillECCLog(state) {
     const kind = state.kind === 'SCC' || state.kind === 'PARENT' ? state.kind : 'ECC';
-    const label = getWorkflowLabel(kind);
+    const label = getWorkflowLabel(kind, state.outcome);
     setECCButton(
       `Preparing ${label} log · ${state.studentNumber}`
     );
@@ -1195,6 +1273,13 @@
       subtype: selectedSubtype
     });
 
+    if (selections.manual) {
+      showSettingsPanel(kind === 'SCC' ? 'SCC Success / SCC Attempt' : state.outcome || label, {
+        typeValue: selections.typeValue, subtypeValue: selections.subtypeValue,
+        typeText: selectedLogType, subtypeText: selectedSubtype
+      });
+    }
+
     // Clear student/note payload before teacher review.
     clearECCState();
 
@@ -1261,7 +1346,7 @@
 
     const kind = ['DEMOGRAPHICS', 'SCC', 'PARENT'].includes(state.kind)
       ? state.kind : 'ECC';
-    const workflowLabel = getWorkflowLabel(kind);
+    const workflowLabel = getWorkflowLabel(kind, state.outcome);
     const path = location.pathname.toLowerCase();
     const isWorkflowPage =
       path.endsWith('/teachers/log.html') ||
@@ -1525,7 +1610,7 @@
 
     if (!isTeacherPage) {
       if (pending) {
-        const kind = getWorkflowLabel(pending.kind || 'ECC');
+        const kind = getWorkflowLabel(pending.kind || 'ECC', pending.outcome);
         setECCButton(
           kind + ' handoff saved — sign in to continue'
         );

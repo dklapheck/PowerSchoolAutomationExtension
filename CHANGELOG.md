@@ -2,6 +2,11 @@
 
 Repository history and prior documentation are the source for the entries below.
 
+## 3.7.1 — 2026-11-20
+
+- After Log Type and Subtype are chosen by hand (blank Settings), show a panel with the chosen values and Copy buttons, to paste into that workflow's PowerSchoolSettings row on Info. **Copy both** puts a tab between them so one paste fills two side-by-side cells. The panel holds no student data.
+- A Parent Contact handoff that names another workflow (the roster's **5+ Attempts** log) shows that name on the status button and in messages.
+
 ## 3.7.0 — 2026-11-19
 
 - Combine the dialog-handoff 3.6.2 architecture and login/Demographics fixes with the parent-contact update on main.

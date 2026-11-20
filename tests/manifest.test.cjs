@@ -10,8 +10,8 @@ const manifest = JSON.parse(fs.readFileSync(
   'utf8'
 ));
 
-test('manifest 3.7.0 has no Google Sheets content access or background launcher', () => {
-  assert.equal(manifest.version, '3.7.0');
+test('manifest 3.7.1 has no Google Sheets content access or background launcher', () => {
+  assert.equal(manifest.version, '3.7.1');
   assert.equal('background' in manifest, false);
   const matches = manifest.content_scripts.flatMap(script => script.matches || []);
   const scripts = manifest.content_scripts.flatMap(script => script.js || []);
