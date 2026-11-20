@@ -6,12 +6,12 @@ Google Sheets is not in the extension manifest. The roster's Apps Script display
 
 ## Installation and updating
 
-1. Download or clone version **3.7.0** from the branch containing this release. After the corrective pull request is merged, use **main**.
+1. Download or clone version **3.7.1** from the branch containing this release. After the corrective pull request is merged, use **main**.
 2. Open `chrome://extensions` or `edge://extensions`.
 3. Turn on **Developer mode**.
 4. Choose **Load unpacked** and select this repository folder.
 
-To update an existing unpacked installation, replace its files with the new repository version, return to the extensions page, and click **Reload**. Confirm the extension shows **3.7.0**. Close any looping PowerSchool tabs and start a fresh handoff from a newly generated roster dialog. If multiple copies of PowerSchool Helper are installed, disable the older copies. Updating GitHub alone does not update an installed unpacked extension.
+To update an existing unpacked installation, replace its files with the new repository version, return to the extensions page, and click **Reload**. Confirm the extension shows **3.7.1**. Close any looping PowerSchool tabs and start a fresh handoff from a newly generated roster dialog. If multiple copies of PowerSchool Helper are installed, disable the older copies. Updating GitHub alone does not update an installed unpacked extension.
 
 ## Demographics workflow
 
@@ -60,6 +60,17 @@ Add a **Parent Contact** workflow row to PowerSchoolSettings on Info, directly b
 
 If the PowerSchool template contains `Note`, the supplied note replaces that placeholder literally, including dollar-sign sequences such as `$&`. Otherwise, the note is appended below the template. The teacher reviews and submits the prepared form.
 
+## Copying manual Type/Subtype choices into Settings
+
+When a workflow row on Info has blank **Log Type value** and **Subtype value**, the extension asks you to choose them in PowerSchool. After you click the blue button, a panel at the bottom right shows the values you chose, for example:
+
+> Settings for the "5+ Attempts" row on Info
+> Log Type value: `1187` (Student Contact) · Subtype value: `GE:ECC` (ECC)
+
+Click **Copy** next to each value and paste it into the matching cell of that row, or click **Copy both** and paste into the **Log Type value** cell when **Subtype value** is the column directly to its right. The next handoff then selects them for you. The panel contains no student data; **Dismiss** closes it.
+
+The roster's **5+ Attempts** log uses the Parent Contact handoff, so it fills the same way, but the status button and messages say **5+ Attempts**.
+
 The temporary settings-capture tool was removed in the dialog-handoff releases and remains removed here. Earlier installation instructions that referred to **Capture PowerSchool settings** do not apply to this version; blank Type/Subtype values support manual selection.
 
 ## Permissions and privacy
@@ -103,7 +114,7 @@ These tests use a simulated DOM. They do not prove live Google Sheets behavior, 
 - **The dialog does not appear:** confirm that the Apps Script project is the dialog-handoff version, refresh the Sheet, and retry with a valid student or SCC/ECC selection.
 - **The button does not open a tab:** allow the user-initiated PowerSchool link if the browser blocks it, then click the button again from a newly generated dialog.
 - **PowerSchool opens but does not continue:** reload the unpacked extension and start a fresh handoff. The extension keeps a short-lived recovery backup for SSO redirects.
-- **Demographics keeps reloading:** confirm **3.7.0** is loaded, disable any older duplicate PowerSchool Helper installations, close the looping tabs, and open a newly generated dialog. This version includes the 3.6.2 fix that stops after an unexpected final-navigation redirect; use **Copy error** if that message appears.
+- **Demographics keeps reloading:** confirm **3.7.1** is loaded, disable any older duplicate PowerSchool Helper installations, close the looping tabs, and open a newly generated dialog. This version includes the 3.6.2 fix that stops after an unexpected final-navigation redirect; use **Copy error** if that message appears.
 - **A field cannot be selected:** verify the current values in the roster's PowerSchool Settings table and compare them with the live PowerSchool form.
 - **An error panel appears:** continue manually in PowerSchool. The extension stops before submitting anything.
 

@@ -21,6 +21,7 @@ function fixture({
   const storage = { ...stored };
   const assignments = [];
   const consoleEntries = [];
+  const clipboard = [];
   const body = { appendChild(el) { if (el.id) elements.set(el.id, el); } };
   let submits = 0;
   let authenticated = authenticatedInitially;
@@ -119,6 +120,7 @@ function fixture({
     } } },
     Event: class { constructor(type) { this.type = type; } },
     MutationObserver: FakeObserver,
+    navigator: { clipboard: { writeText: async value => { clipboard.push(value); } } },
     URL, TextDecoder, Uint8Array, atob, setInterval, clearInterval, setTimeout,
     console: {
       log: (...args) => consoleEntries.push(args),
@@ -128,7 +130,8 @@ function fixture({
   vm.runInContext(source, context);
   return {
     logType, subtype, noteBox, dateInput, incidentDate, actionDate,
-    tagSelect, storage, session, assignments, consoleEntries,
+    tagSelect, storage, session, assignments, consoleEntries, clipboard,
+    get settingsPanel() { return elements.get('ps-helper-settings-panel'); },
     completeSignIn() {
       authenticated = true;
       signInObserver?.callback([]);
@@ -607,3 +610,36 @@ for (const destination of ['contacts', 'home', 'wrong-student']) {
     assert.equal(refreshed.submits, 0);
   });
 }
+
+const textOf = element => [element.textContent || '', ...(element.children || []).map(textOf)].join('');
+const buttonsOf = element => [...(element.children || []).flatMap(child =>
+  child.type === 'button' ? [child] : buttonsOf(child))];
+
+test('manual choices show the values to paste into the Info row, under the workflow name', async () => {
+  const env = fixture({
+    kind: 'PARENT', outcome: '5+ Attempts',
+    settings: { typeValue: '', subtypeValue: '', extraDropdowns: [] }
+  });
+  await waitFor(() => env.button?.textContent === '5+ Attempts: choose Type & Subtype, then click here');
+  env.logType.value = '1187';
+  env.subtype.value = 'GE:ECC';
+  env.button.onclick();
+  await waitFor(() => env.button?.textContent === '5+ Attempts ready — review & Submit');
+  const panel = env.settingsPanel, text = textOf(panel);
+  assert.match(text, /Settings for the "5\+ Attempts" row on Info/);
+  assert.match(text, /Log Type value: 1187 \(Student Contact\)/);
+  assert.match(text, /Subtype value: GE:ECC \(ECC\)/);
+  assert.doesNotMatch(text, /12345678|spoke with parent/, 'no student data in the panel');
+  const buttons = buttonsOf(panel);
+  await buttons.find(b => b.textContent === 'Copy both (side-by-side cells)').onclick();
+  await buttons.filter(b => b.textContent === 'Copy')[1].onclick();
+  assert.deepEqual(env.clipboard, ['1187\tGE:ECC', 'GE:ECC']);
+  assert.equal(env.submits, 0);
+});
+
+test('configured Settings show no copy panel; an unknown workflow name falls back to Parent Contact', async () => {
+  const env = fixture({kind: 'PARENT', outcome: '<b>x</b>',
+    settings: {typeValue: '1187', subtypeValue: 'SCC_PARENT', extraDropdowns: []}});
+  await waitFor(() => env.button?.textContent === 'Parent Contact ready — review & Submit');
+  assert.equal(env.settingsPanel, undefined);
+});
